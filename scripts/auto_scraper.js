@@ -77,9 +77,9 @@ async function scrapeTweetLinks(browser, targetAccount, baseProgress) {
         }
     });
 
-    // domcontentloaded yerine networkidle2 beklemek Render'da 30s+ sürüyor
-    await page.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
-    await sleep(5000); // Sayfa JS'i yüklensin diye bekle
+    // networkidle2: redirect tamamlandıktan sonra bekle (domcontentloaded frame detach'e yol açıyor)
+    await page.goto(TARGET_URL, { waitUntil: 'networkidle2', timeout: 90000 });
+    await sleep(4000);
 
     let scrolls = 0;
     while (allStatusUrls.size < MAX_VIDEOS_PER_ACCOUNT && scrolls < 5) {
@@ -236,8 +236,8 @@ async function runAutomation() {
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
                     '--disable-gpu',
-                    '--disable-software-rasterizer',
-                    '--single-process'
+                    '--disable-software-rasterizer'
+                    // NOT: --single-process kaldırıldı — tab çökünce tüm tarayıcıyı öldürüyordu
                 ]
             }),
             new Promise((_, reject) =>
@@ -255,10 +255,33 @@ async function runAutomation() {
         const target = TARGET_ACCOUNTS[i];
         const baseProgressPct = Math.floor(i * (100 / TARGET_ACCOUNTS.length));
         try {
+            // Tarayıcı öldüyse (ConnectionClosedError) yeniden başlat
+            if (!browser.connected) {
+                console.log('⚠️  Browser öldü, yeniden başlatılıyor...');
+                try { await browser.close(); } catch (_) { }
+                browser = await puppeteer.launch({
+                    headless: true,
+                    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-software-rasterizer']
+                });
+            }
             const urls = await scrapeTweetLinks(browser, target, baseProgressPct);
             await downloadAndUpload(target, urls, baseProgressPct);
         } catch (err) {
-            console.error(`💥 ${target} hesabında kritik çökme:`, err);
+            console.error(`💥 ${target} hesabında kritik çökme:`, err.message);
+            // Browser öldüyse yeniden başlat
+            if (err.message.includes('Connection closed') || err.message.includes('detached')) {
+                console.log('🔄 Browser yeniden başlatılıyor...');
+                try { await browser.close(); } catch (_) { }
+                try {
+                    browser = await puppeteer.launch({
+                        headless: true,
+                        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-software-rasterizer']
+                    });
+                } catch (relaunchErr) {
+                    console.error('❌ Browser yeniden başlatılamadı:', relaunchErr.message);
+                    break;
+                }
+            }
         }
     }
 
