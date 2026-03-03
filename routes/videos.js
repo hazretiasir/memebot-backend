@@ -65,6 +65,7 @@ async function videoToJson(v) {
         likes: v.likes,
         dislikes: v.dislikes,
         relevanceScore: v.relevanceScore,
+        viewCount: v.viewCount,
         downloadCount: v.downloadCount,
         createdAt: v.createdAt,
     };
