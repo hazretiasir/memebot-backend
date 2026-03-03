@@ -3,18 +3,18 @@ const router = express.Router();
 const SearchLog = require('../models/SearchLog');
 
 // ─── GET /api/searches/trending ──────────────────────────────────────────────
-// Returns top N queries from the last 30 days, ranked by search count.
+// Returns top N queries from the last 24 hours, ranked by search count.
 router.get('/trending', async (req, res) => {
     const { limit = 8 } = req.query;
     const limitNum = Math.min(parseInt(limit) || 8, 20);
 
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
 
     try {
         const trending = await SearchLog.aggregate([
-            // 1. Only last 30 days
-            { $match: { createdAt: { $gte: thirtyDaysAgo } } },
+            // 1. Only last 24 hours
+            { $match: { createdAt: { $gte: oneDayAgo } } },
 
             // 2. Group by query, count occurrences
             {
