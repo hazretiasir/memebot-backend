@@ -80,6 +80,17 @@ function _localExpand(originalQuery) {
 }
 
 // ─── Gemini Query Expansion ───────────────────────────────────────────────────
+
+// Timeout wrapper: reject if Gemini doesn't respond within ms milliseconds
+function withTimeout(promise, ms) {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Gemini timeout after ${ms}ms`)), ms)
+        )
+    ]);
+}
+
 async function expandQuery(originalQuery) {
     if (!process.env.GEMINI_API_KEY) {
         const result = _localExpand(originalQuery);
@@ -95,7 +106,8 @@ Bu aramayla ilgili, farklı kelimelerle ifade edilmiş 4 arama terimi üret.
 Türkçe ve İngilizce karışık olabilir. 1-4 kelime, arama dostu olsun.
 Sadece JSON array döndür, başka hiçbir şey yazma: ["terim1","terim2","terim3","terim4"]`;
 
-        const result = await model.generateContent(prompt);
+        // 5 second timeout — fail fast on Render free tier
+        const result = await withTimeout(model.generateContent(prompt), 5000);
         const cleaned = result.response.text().trim().replace(/```json|```/g, '').trim();
         const aiTerms = JSON.parse(cleaned);
 
