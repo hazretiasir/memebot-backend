@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Environment variables - GİZLİ! Asla commit etme
+.env
+
+# Scraper runtime files
+scraper_status.json
+scraper_out.log
+scraper_err.log
+scraped_tweets_*.json
+uploaded_tweets_*.json
+twitter_session/
+
+# Temp video files
+temp_*.mp4
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

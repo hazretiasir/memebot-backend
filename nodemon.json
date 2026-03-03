@@ -1,0 +1,19 @@
+{
+    "watch": [
+        "server.js",
+        "routes/",
+        "models/",
+        "config/",
+        "utils/"
+    ],
+    "ext": "js",
+    "ignore": [
+        "scraper_status.json",
+        "scraper_out.log",
+        "scraper_err.log",
+        "*.log",
+        "scraped_tweets_*.json",
+        "scripts/"
+    ],
+    "delay": 500
+}
