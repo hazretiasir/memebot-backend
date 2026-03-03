@@ -77,8 +77,9 @@ async function scrapeTweetLinks(browser, targetAccount, baseProgress) {
         }
     });
 
-    await page.goto(TARGET_URL, { waitUntil: 'networkidle2' });
-    await sleep(4000);
+    // domcontentloaded yerine networkidle2 beklemek Render'da 30s+ sürüyor
+    await page.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
+    await sleep(5000); // Sayfa JS'i yüklensin diye bekle
 
     let scrolls = 0;
     while (allStatusUrls.size < MAX_VIDEOS_PER_ACCOUNT && scrolls < 5) {
