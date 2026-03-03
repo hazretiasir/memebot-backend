@@ -3,7 +3,7 @@ services:
     name: memebot-backend
     env: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm install && npx puppeteer browsers install chrome
     startCommand: npm start
     healthCheckPath: /api/videos/feed
     envVars:
