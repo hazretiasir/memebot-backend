@@ -224,16 +224,31 @@ async function runAutomation() {
 
     updateProgress('running', `Avcı Başlatıldı, Bağlantı Kuruluyor...`, 0);
 
-    const browser = await puppeteer.launch({
-        headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--disable-software-rasterizer'
-        ]
-    });
+    // 30 saniye içinde başlamazsa hata yaz
+    let browser;
+    try {
+        browser = await Promise.race([
+            puppeteer.launch({
+                headless: true,
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                    '--disable-software-rasterizer',
+                    '--single-process'
+                ]
+            }),
+            new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Chrome 30 saniyede başlamadı (Render free tier sınırı)')), 30000)
+            )
+        ]);
+    } catch (launchErr) {
+        console.error('\u274c Chrome hatası:', launchErr.message);
+        updateProgress('error', `Chrome başlamadı: ${launchErr.message}`, 0);
+        return;
+    }
+
 
     for (let i = 0; i < TARGET_ACCOUNTS.length; i++) {
         const target = TARGET_ACCOUNTS[i];
