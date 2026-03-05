@@ -99,6 +99,17 @@ async function tryCobalt(url, isAudio) {
     return null;
 }
 
+// ─── Detect source referer for CDN auth ───────────────────────────────────────
+function getReferer(originalUrl) {
+    if (/tiktok\.com/i.test(originalUrl))   return 'https://www.tiktok.com/';
+    if (/instagram\.com/i.test(originalUrl)) return 'https://www.instagram.com/';
+    if (/twitter\.com|x\.com/i.test(originalUrl)) return 'https://twitter.com/';
+    if (/youtube\.com|youtu\.be/i.test(originalUrl)) return 'https://www.youtube.com/';
+    if (/pinterest\./i.test(originalUrl))   return 'https://www.pinterest.com/';
+    if (/reddit\.com/i.test(originalUrl))   return 'https://www.reddit.com/';
+    return null;
+}
+
 // ─── POST /api/downloader/download ────────────────────────────────────────────
 router.post('/download', async (req, res) => {
     const { url, format } = req.body;
@@ -122,6 +133,7 @@ router.post('/download', async (req, res) => {
     res.json({
         downloadUrl: result.downloadUrl,
         filename: `MemeBot.${isAudio ? 'mp3' : (result.ext || 'mp4')}`,
+        referer: getReferer(url),   // Flutter uses this header when downloading from CDN
     });
 });
 
