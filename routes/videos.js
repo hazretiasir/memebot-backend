@@ -202,7 +202,7 @@ router.get('/suggest-tags', async (req, res) => {
 
 // ─── GET /api/videos/search?q=...&limit=5 ────────────────────────────────────
 router.get('/search', async (req, res) => {
-    const { q, limit = 1, page = 1 } = req.query;
+    const { q, limit = 1, page = 1, excludeIds } = req.query;
 
     if (!q || q.trim() === '') {
         return res.status(400).json({ error: 'Search query is required' });
@@ -213,6 +213,8 @@ router.get('/search', async (req, res) => {
         const limitNum = Math.min(parseInt(limit) || 1, 20);
         const pageNum = Math.max(parseInt(page) || 1, 1);
         const skip = (pageNum - 1) * limitNum;
+        const excludeArray = excludeIds ? excludeIds.split(',') : [];
+
 
         // ── 0. Run query expansion + embedding generation in parallel ─────────
         const [expandedTerms, queryEmbedding] = await Promise.all([
@@ -225,10 +227,12 @@ router.get('/search', async (req, res) => {
         function addToMap(results, weight) {
             results.forEach(v => {
                 const id = v._id.toString();
+                if (excludeArray.includes(id)) return; // User already saw this
                 if (scoreMap.has(id)) scoreMap.get(id).score += weight;
                 else scoreMap.set(id, { video: v, score: weight });
             });
         }
+
 
         // ── 0.5. Doğrudan Peş Peşe Kelimeleri Barındıranlar (Mutlak VIP Öncelik) ───────
         const queryWordsArr = query.split(/\s+/).filter(Boolean);
@@ -346,7 +350,9 @@ router.get('/search', async (req, res) => {
 
         // ── 4. Still nothing? Fall back to most popular ───────────────────────
         if (allRankedVideos.length === 0) {
-            allRankedVideos = await Video.find()
+            allRankedVideos = await Video.find({
+                ...(excludeArray.length > 0 ? { _id: { $nin: excludeArray } } : {})
+            })
                 .sort({ relevanceScore: -1, likes: -1 })
                 .limit(50);
         }
