@@ -99,17 +99,16 @@ async function tryCobalt(url, isAudio) {
     return null;
 }
 
-// ─── Platforms whose CDN URLs are IP-locked (must stream via backend) ──────────
-function isIpLockedPlatform(url) {
-    return /tiktok\.com|tiktokcdn/i.test(url);
+// ─── Unsupported platforms ─────────────────────────────────────────────────────
+function isUnsupported(url) {
+    return /youtube\.com|youtu\.be|tiktok\.com|tiktokcdn/i.test(url);
 }
 
 function getReferer(originalUrl) {
     if (/instagram\.com/i.test(originalUrl)) return 'https://www.instagram.com/';
     if (/twitter\.com|x\.com/i.test(originalUrl)) return 'https://twitter.com/';
-    if (/youtube\.com|youtu\.be/i.test(originalUrl)) return 'https://www.youtube.com/';
-    if (/pinterest\./i.test(originalUrl))   return 'https://www.pinterest.com/';
-    if (/reddit\.com/i.test(originalUrl))   return 'https://www.reddit.com/';
+    if (/pinterest\./i.test(originalUrl))    return 'https://www.pinterest.com/';
+    if (/reddit\.com/i.test(originalUrl))    return 'https://www.reddit.com/';
     return null;
 }
 
@@ -118,53 +117,25 @@ router.post('/download', async (req, res) => {
     const { url, format } = req.body;
     if (!url) return res.status(400).json({ error: 'URL is required' });
 
+    if (isUnsupported(url)) {
+        return res.status(400).json({
+            error: 'YouTube ve TikTok desteklenmiyor. Instagram, Twitter, Pinterest veya Reddit linklerini deneyin.',
+        });
+    }
+
     const isAudio = format === 'mp3';
     console.log(`[Downloader] Request: ${url}`);
 
-    // 1. Try yt-dlp (has cookies + multiple player clients)
     let result = await tryYtdlp(url, isAudio);
-
-    // 2. Fallback: try cobalt community instances
     if (!result) result = await tryCobalt(url, isAudio);
 
     if (!result) {
         return res.status(500).json({
-            error: 'Bu video indirilemedi. Platform bot koruması engelliyor olabilir.',
+            error: 'Bu video indirilemedi. Lütfen daha sonra tekrar deneyin.',
         });
     }
 
     const ext = isAudio ? 'mp3' : (result.ext || 'mp4');
-
-    // ── TikTok & IP-locked CDNs: stream through backend ───────────────────────
-    if (isIpLockedPlatform(url)) {
-        console.log(`[Downloader] IP-locked platform — streaming via backend`);
-        const tmpFile = path.join(os.tmpdir(), `memebot_${Date.now()}.${ext}`);
-        try {
-            // Download from CDN on the server side (same IP that got the URL)
-            const fileRes = await fetch(result.downloadUrl, {
-                headers: {
-                    'Referer': 'https://www.tiktok.com/',
-                    'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36',
-                },
-            });
-            if (!fileRes.ok) throw new Error(`CDN returned ${fileRes.status}`);
-
-            const chunks = [];
-            for await (const chunk of fileRes.body) chunks.push(chunk);
-            fs.writeFileSync(tmpFile, Buffer.concat(chunks));
-
-            res.download(tmpFile, `MemeBot.${ext}`, () => {
-                if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
-            });
-        } catch (e) {
-            if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
-            console.error('[Downloader] Stream error:', e.message);
-            res.status(500).json({ error: 'TikTok indirme başarısız', details: e.message });
-        }
-        return;
-    }
-
-    // ── Other platforms: return CDN URL directly ───────────────────────────────
     res.json({
         downloadUrl: result.downloadUrl,
         filename: `MemeBot.${ext}`,
