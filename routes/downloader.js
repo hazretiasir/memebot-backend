@@ -99,9 +99,12 @@ async function tryCobalt(url, isAudio) {
     return null;
 }
 
-// ─── Detect source referer for CDN auth ───────────────────────────────────────
+// ─── Platforms whose CDN URLs are IP-locked (must stream via backend) ──────────
+function isIpLockedPlatform(url) {
+    return /tiktok\.com|tiktokcdn/i.test(url);
+}
+
 function getReferer(originalUrl) {
-    if (/tiktok\.com/i.test(originalUrl))   return 'https://www.tiktok.com/';
     if (/instagram\.com/i.test(originalUrl)) return 'https://www.instagram.com/';
     if (/twitter\.com|x\.com/i.test(originalUrl)) return 'https://twitter.com/';
     if (/youtube\.com|youtu\.be/i.test(originalUrl)) return 'https://www.youtube.com/';
@@ -126,14 +129,46 @@ router.post('/download', async (req, res) => {
 
     if (!result) {
         return res.status(500).json({
-            error: 'Bu video indirilemedi. Platform bot koruması engelliyor olabilir. Twitter, TikTok veya Reddit linklerini deneyin.',
+            error: 'Bu video indirilemedi. Platform bot koruması engelliyor olabilir.',
         });
     }
 
+    const ext = isAudio ? 'mp3' : (result.ext || 'mp4');
+
+    // ── TikTok & IP-locked CDNs: stream through backend ───────────────────────
+    if (isIpLockedPlatform(url)) {
+        console.log(`[Downloader] IP-locked platform — streaming via backend`);
+        const tmpFile = path.join(os.tmpdir(), `memebot_${Date.now()}.${ext}`);
+        try {
+            // Download from CDN on the server side (same IP that got the URL)
+            const fileRes = await fetch(result.downloadUrl, {
+                headers: {
+                    'Referer': 'https://www.tiktok.com/',
+                    'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36',
+                },
+            });
+            if (!fileRes.ok) throw new Error(`CDN returned ${fileRes.status}`);
+
+            const chunks = [];
+            for await (const chunk of fileRes.body) chunks.push(chunk);
+            fs.writeFileSync(tmpFile, Buffer.concat(chunks));
+
+            res.download(tmpFile, `MemeBot.${ext}`, () => {
+                if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+            });
+        } catch (e) {
+            if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+            console.error('[Downloader] Stream error:', e.message);
+            res.status(500).json({ error: 'TikTok indirme başarısız', details: e.message });
+        }
+        return;
+    }
+
+    // ── Other platforms: return CDN URL directly ───────────────────────────────
     res.json({
         downloadUrl: result.downloadUrl,
-        filename: `MemeBot.${isAudio ? 'mp3' : (result.ext || 'mp4')}`,
-        referer: getReferer(url),   // Flutter uses this header when downloading from CDN
+        filename: `MemeBot.${ext}`,
+        referer: getReferer(url),
     });
 });
 
