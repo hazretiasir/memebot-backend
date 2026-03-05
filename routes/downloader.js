@@ -6,6 +6,13 @@ const os = require('os');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
+// ─── Write YouTube cookies once at startup ────────────────────────────────────
+const COOKIES_PATH = path.join(os.tmpdir(), 'yt_cookies.txt');
+if (process.env.YOUTUBE_COOKIES) {
+    fs.writeFileSync(COOKIES_PATH, process.env.YOUTUBE_COOKIES, 'utf8');
+    console.log('[Downloader] YouTube cookies loaded from env.');
+}
+
 // ─── POST /api/downloader/download ───────────────────────────────────────────
 router.post('/download', async (req, res) => {
     const { url, format } = req.body;
@@ -25,10 +32,13 @@ router.post('/download', async (req, res) => {
             output: filePath,
             noWarnings: true,
             noCheckCertificates: true,
-            // Bypass YouTube bot detection by using the Android/iOS player client
-            extractorArgs: 'youtube:player_client=android,ios,web',
             noPlaylist: true,
         };
+
+        // Use cookies if available (required for YouTube bot detection bypass)
+        if (fs.existsSync(COOKIES_PATH)) {
+            options.cookies = COOKIES_PATH;
+        }
 
         if (isAudio) {
             options.extractAudio = true;
