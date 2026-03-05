@@ -4,7 +4,6 @@ const youtubedl = require('youtube-dl-exec');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
 
 // ─── Write YouTube cookies once at startup ────────────────────────────────────
 const COOKIES_PATH = path.join(os.tmpdir(), 'yt_cookies.txt');
@@ -21,6 +20,8 @@ const COOKIES_PATH = path.join(os.tmpdir(), 'yt_cookies.txt');
 })();
 
 // ─── POST /api/downloader/download ───────────────────────────────────────────
+// Returns a direct CDN URL — Flutter downloads from there directly.
+// This avoids Render timeout and disk usage entirely.
 router.post('/download', async (req, res) => {
     const { url, format } = req.body;
 
@@ -29,60 +30,47 @@ router.post('/download', async (req, res) => {
     }
 
     const isAudio = format === 'mp3';
-    const ext = isAudio ? 'mp3' : 'mp4';
-    const filePath = path.join(os.tmpdir(), `memebot_${uuidv4()}.${ext}`);
-
-    console.log(`[Downloader] Request received for: ${url} (format: ${ext})`);
+    console.log(`[Downloader] Fetching CDN URL for: ${url} (format: ${format})`);
 
     try {
         const options = {
-            output: filePath,
+            dumpSingleJson: true,
             noWarnings: true,
             noCheckCertificates: true,
             noPlaylist: true,
+            // Single pre-merged file — no ffmpeg needed
+            format: isAudio ? 'bestaudio[ext=m4a]/bestaudio' : 'best[ext=mp4]/best',
         };
 
-        // Use cookies if available (required for YouTube bot detection bypass)
         if (fs.existsSync(COOKIES_PATH)) {
             options.cookies = COOKIES_PATH;
         }
 
-        if (isAudio) {
-            options.extractAudio = true;
-            options.audioFormat = 'mp3';
-            options.audioQuality = 0;
-        } else {
-            // Prefer pre-merged mp4 to avoid ffmpeg dependency on Render.
-            // Falls back to best available if no combined mp4 exists.
-            options.format = 'best[ext=mp4]/best';
+        const info = await youtubedl(url, options);
+
+        // Extract direct stream URL
+        const directUrl = info.url
+            || (info.requested_formats && info.requested_formats[0]?.url)
+            || null;
+
+        if (!directUrl) {
+            return res.status(500).json({ error: 'Could not extract direct URL' });
         }
 
-        // Run youtube-dl
-        await youtubedl(url, options);
-        console.log(`[Downloader] Download completed to temp file: ${filePath}`);
+        const ext = isAudio ? 'm4a' : 'mp4';
+        const safeTitle = (info.title || 'MemeBot_Video').replace(/[^a-z0-9_\- ]/gi, '_').substring(0, 60);
 
-        // Stream file back to client
-        res.download(filePath, `MemeBot_Video.${ext}`, (err) => {
-            if (err) {
-                console.error('[Downloader] Error sending file to client:', err);
-                if (!res.headersSent) {
-                    res.status(500).end();
-                }
-            }
-            // Essential: Delete file to avoid filling up server disk
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
-                console.log(`[Downloader] Temp file deleted: ${filePath}`);
-            }
+        console.log(`[Downloader] CDN URL resolved for: ${safeTitle}`);
+        res.json({
+            downloadUrl: directUrl,
+            filename: `${safeTitle}.${ext}`,
+            title: info.title,
+            ext,
         });
 
     } catch (err) {
-        console.error('[Downloader] Download error:', err.message);
-        // Cleanup if task failed mid-way
-        if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-        }
-        res.status(500).json({ error: 'Failed to process video', details: err.message });
+        console.error('[Downloader] Error:', err.message);
+        res.status(500).json({ error: 'Failed to process URL', details: err.message });
     }
 });
 
