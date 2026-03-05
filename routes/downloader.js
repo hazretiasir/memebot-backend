@@ -25,6 +25,9 @@ router.post('/download', async (req, res) => {
             output: filePath,
             noWarnings: true,
             noCheckCertificates: true,
+            // Bypass YouTube bot detection by using the Android/iOS player client
+            extractorArgs: 'youtube:player_client=android,ios,web',
+            noPlaylist: true,
         };
 
         if (isAudio) {
