@@ -5,6 +5,7 @@ const cors = require('cors');
 
 const videoRoutes = require('./routes/videos');
 const searchRoutes = require('./routes/searches');
+const downloaderRoutes = require('./routes/downloader');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,6 +19,7 @@ app.use(express.static('public'));
 // ─── Routes ──────────────────────────────────────────────────────────────────
 app.use('/api/videos', videoRoutes);
 app.use('/api/searches', searchRoutes);
+app.use('/api/downloader', downloaderRoutes);
 
 
 app.get('/health', (req, res) => {
