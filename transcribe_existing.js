@@ -15,21 +15,35 @@
 
 require('dotenv').config();
 const mongoose = require('mongoose');
-const axios = require('axios');
-const pLimit = require('p-limit');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const pLimit = require('p-limit').default ?? require('p-limit');
+const { GetObjectCommand } = require('@aws-sdk/client-s3');
 
+const s3Client = require('./config/aws');
 const Video = require('./models/Video');
 const { generateTranscript, generateTags, generateEmbedding } = require('./utils/gemini');
 
-const CONCURRENCY = 4;
+const CONCURRENCY = 2; // Reduced to 2 to respect Gemini Free Tier 15 RPM limits
 const limit = pLimit(CONCURRENCY);
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-async function downloadVideoBuffer(url) {
-    const resp = await axios.get(url, { responseType: 'arraybuffer', timeout: 60000 });
-    return Buffer.from(resp.data);
+async function downloadFromS3(s3Key) {
+    const cmd = new GetObjectCommand({
+        Bucket: process.env.S3_BUCKET_NAME,
+        Key: s3Key,
+    });
+    const resp = await s3Client.send(cmd);
+
+    // Convert the readable stream to a Buffer
+    const chunks = [];
+    for await (const chunk of resp.Body) {
+        chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+    }
+    return Buffer.concat(chunks);
 }
 
 // ── Process a single video ────────────────────────────────────────────────────
@@ -37,8 +51,8 @@ async function processVideo(video, index, total) {
     const label = `[${index}/${total}] "${video.title.substring(0, 50)}"`;
 
     try {
-        // 1. Download from S3 / CloudFront
-        const videoBuffer = await downloadVideoBuffer(video.s3Url);
+        // 1. Download from S3 directly (avoids CloudFront 403 issues)
+        const videoBuffer = await downloadFromS3(video.s3Key);
         const mimeType = 'video/mp4';
 
         // 2. Transcribe (maxRetries=3 handled inside generateTranscript)
@@ -69,6 +83,9 @@ async function processVideo(video, index, total) {
 
         console.log(`✅ ${label} — hasSpeech=${hasSpeech}, tags=${mergedTags.length}, transcript_len=${transcript.length}`);
 
+        // 6. Respect Rate Limits: 2 requests per video (transcript + tags) -> 15 RPM max = ~8 seconds per video
+        await sleep(8000);
+
     } catch (err) {
         // Mark as processed-but-failed (hasSpeech=false) so we don't retry endlessly
         await Video.findByIdAndUpdate(video._id, { hasSpeech: false, transcript: '' }).catch(() => { });
@@ -83,7 +100,7 @@ async function main() {
     console.log('✅ Connected!\n');
 
     // Only fetch videos that haven't been transcribed yet
-    const videos = await Video.find({ hasSpeech: null }, '_id title tags description s3Url').lean();
+    const videos = await Video.find({ hasSpeech: null }, '_id title tags description s3Key').lean();
     const total = videos.length;
     console.log(`🎙️  Found ${total} unprocessed videos. Starting batch transcription with concurrency=${CONCURRENCY}...\n`);
 

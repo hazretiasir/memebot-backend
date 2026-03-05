@@ -212,43 +212,65 @@ Kurallar:
     }
 }
 
-// ─── Gemini Audio Transcription (File API) ────────────────────────────────────
+// ─── Gemini Audio Transcription (Inline MP3 via ffmpeg) ───────────────────────────────────
 // Returns: { transcript: string, hasSpeech: boolean }
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const ffmpeg = require('fluent-ffmpeg');
+const ffmpegPath = require('ffmpeg-static');
+ffmpeg.setFfmpegPath(ffmpegPath);
+
+function extractAudio(videoPath, audioPath) {
+    return new Promise((resolve, reject) => {
+        ffmpeg(videoPath)
+            .noVideo()
+            .audioCodec('libmp3lame')
+            .audioBitrate(64) // 64kbps is enough for speech
+            .on('end', () => resolve(audioPath))
+            .on('error', err => reject(err))
+            .save(audioPath);
+    });
+}
+
+
 async function generateTranscript(videoBuffer, mimeType = 'video/mp4', maxRetries = 3) {
     if (!process.env.GEMINI_API_KEY) return { transcript: '', hasSpeech: false };
 
     let lastErr;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        let uploadedFile = null;
+        let videoTmpPath = null;
+        let audioTmpPath = null;
         try {
-            // 1. Upload video buffer to Gemini File API (temporary, auto-deleted after 48h)
-            const b64 = videoBuffer.toString('base64');
-            const uploadResp = await fileManager.uploadFile(
-                { inlineData: { mimeType, data: b64 } },
-                { mimeType, displayName: `memebot_transcribe_${Date.now()}` }
-            );
-            uploadedFile = uploadResp.file;
+            // 1. Write video buffer to temp file
+            videoTmpPath = path.join(os.tmpdir(), `memebot_vid_${Date.now()}_${attempt}.mp4`);
+            audioTmpPath = path.join(os.tmpdir(), `memebot_aud_${Date.now()}_${attempt}.mp3`);
 
-            // Wait until file is ACTIVE
-            let file = uploadedFile;
-            while (file.state === 'PROCESSING') {
-                await new Promise(r => setTimeout(r, 2000));
-                file = await fileManager.getFile(file.name);
-            }
-            if (file.state !== 'ACTIVE') throw new Error(`File state: ${file.state}`);
+            fs.writeFileSync(videoTmpPath, videoBuffer);
 
-            // 2. Ask Gemini to transcribe speech
+            // 2. Extract Audio (extremely fast for small memes)
+            await extractAudio(videoTmpPath, audioTmpPath);
+            const audioBuffer = fs.readFileSync(audioTmpPath);
+            const b64 = audioBuffer.toString('base64');
+
+            // 3. Clean up temp files immediately to save disk space
+            try { fs.unlinkSync(videoTmpPath); } catch (_) { }
+            try { fs.unlinkSync(audioTmpPath); } catch (_) { }
+            videoTmpPath = null;
+            audioTmpPath = null;
+
+            // 4. Send MP3 directly inline to Gemini (No File API needed!)
             const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-            const prompt = `Bu videoyu dinle ve içindeki TÜM Türkçe konuşmaları, diyalogları ve seslendirmeleri olduğu gibi yaz.
+            const prompt = `Bu sesi dinle ve içindeki TÜM Türkçe konuşmaları, diyalogları ve seslendirmeleri olduğu gibi yaz.
 Eğer hiç konuşma yoksa (sadece müzik, efekt veya sessizlik), tam olarak şunu yaz: KONUSMA_YOK
 Başka hiçbir açıklama ekleme, sadece konuşmaları yaz.`;
 
             const result = await withTimeout(
                 model.generateContent([
-                    { fileData: { fileUri: file.uri, mimeType: file.mimeType } },
+                    { inlineData: { mimeType: 'audio/mp3', data: b64 } },
                     prompt,
                 ]),
-                30000
+                30000 // 30s timeout
             );
 
             const text = result.response.text().trim();
@@ -257,14 +279,12 @@ Başka hiçbir açıklama ekleme, sadece konuşmaları yaz.`;
 
             console.log(`🎙️  Transcript [attempt ${attempt}]: hasSpeech=${hasSpeech}, length=${transcript.length}`);
 
-            // 3. Delete uploaded file from Gemini (optional cleanup)
-            try { await fileManager.deleteFile(uploadedFile.name); } catch (_) { }
-
             return { transcript, hasSpeech };
 
         } catch (err) {
             lastErr = err;
-            if (uploadedFile) { try { await fileManager.deleteFile(uploadedFile.name); } catch (_) { } }
+            if (videoTmpPath) { try { fs.unlinkSync(videoTmpPath); } catch (_) { } }
+            if (audioTmpPath) { try { fs.unlinkSync(audioTmpPath); } catch (_) { } }
             console.warn(`⚠️  Transcript attempt ${attempt}/${maxRetries} failed: ${err.message.slice(0, 80)}`);
             if (attempt < maxRetries) await new Promise(r => setTimeout(r, 3000 * attempt));
         }
