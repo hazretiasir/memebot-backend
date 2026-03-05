@@ -375,8 +375,10 @@ router.get('/search', async (req, res) => {
             } catch (_) { /* ignore */ }
         });
 
-        // Log search query for trending (non-blocking)
-        SearchLog.create({ query: query }).catch(() => { /* ignore */ });
+        // Log search query for trending only on the first request (non-blocking)
+        if (pageNum === 1) {
+            SearchLog.create({ query: query }).catch(() => { /* ignore */ });
+        }
 
         res.json({
             query: q,
