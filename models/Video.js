@@ -72,10 +72,26 @@ const videoSchema = new mongoose.Schema({
         type: [Number],
         default: undefined, // omit field when not yet generated
     },
+
+    // ─── Audio Transcription ─────────────────────────────────────────────────
+    transcript: {
+        type: String,
+        default: '',       // empty string = processed but no speech
+    },
+    hasSpeech: {
+        type: Boolean,
+        default: null,     // null = not yet processed, true/false = result
+    },
+    // Unified search text: title + tags + description + transcript
+    // This single field drives both full-text and vector search
+    searchText: {
+        type: String,
+        default: '',
+    },
 });
 
-// Full-text search index on title, description, and tags
-videoSchema.index({ title: 'text', description: 'text', tags: 'text' });
+// Full-text search index: now includes transcript and searchText
+videoSchema.index({ title: 'text', description: 'text', tags: 'text', transcript: 'text', searchText: 'text' });
 // Note: the vector search index must be created in Atlas UI (see README)
 
 

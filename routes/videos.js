@@ -13,7 +13,7 @@ const s3Client = require('../config/aws');
 const Video = require('../models/Video');
 const SearchLog = require('../models/SearchLog');
 const { generateAndUploadThumbnail } = require('../utils/thumbnail');
-const { expandQuery, generateEmbedding, generateTags, generateVideoDescription } = require('../utils/gemini');
+const { expandQuery, generateEmbedding, generateTags, generateVideoDescription, generateTranscript } = require('../utils/gemini');
 
 
 
@@ -124,31 +124,41 @@ router.post('/upload', upload.single('video'), async (req, res) => {
 
         setImmediate(async () => {
             try {
-                // 1. Generate Thumbnail
+                // ── STEP 1: Generate Thumbnail ────────────────────────────────────────
                 const { thumbUrl, thumbKey, thumbBuffer } = await generateAndUploadThumbnail(videoBuffer, videoMime);
                 console.log(`✅ Thumbnail generated for video ${videoId}`);
+                await Video.findByIdAndUpdate(videoId, { thumbnailUrl: thumbUrl, thumbnailKey: thumbKey });
 
-                // 2. Generate AI Description from Thumbnail
+                // ── STEP 2: Audio Transcript (strongest semantic signal) ──────────
+                const { transcript, hasSpeech } = await generateTranscript(videoBuffer, videoMime);
+                console.log(`🎙️  Transcript done: hasSpeech=${hasSpeech}, len=${transcript.length}`);
+
+                // ── STEP 3: AI Description from Thumbnail ─────────────────────
                 let aiDescription = null;
                 if (thumbBuffer) {
                     aiDescription = await generateVideoDescription(thumbBuffer, 'image/jpeg');
                     if (aiDescription) console.log(`✅ AI Description generated for video ${videoId}`);
                 }
 
-                // 3. Update DB with thumbnail and description
-                await Video.findByIdAndUpdate(videoId, {
-                    thumbnailUrl: thumbUrl,
-                    thumbnailKey: thumbKey,
-                    description: aiDescription
-                });
+                // ── STEP 4: AI Tags → now powered by transcript too ──────────────
+                const aiTags = await generateTags(title, transcript);
+                const mergedTags = [...new Set([...parsedTags, ...aiTags])];
 
-                // 4. Generate Embedding (incorporating the rich description)
-                const textToEmbed = `${title} ${aiDescription || ''} ${parsedTags.join(' ')}`.trim();
-                const embedding = await generateEmbedding(textToEmbed);
-                if (embedding) {
-                    await Video.findByIdAndUpdate(videoId, { embedding });
-                    console.log(`✅ Embedding generated for video ${videoId}`);
-                }
+                // ── STEP 5: Build unified searchText & Embedding ──────────────
+                const searchText = [title, mergedTags.join(' '), aiDescription || '', transcript].join(' ').trim();
+                const embedding = await generateEmbedding(searchText);
+                if (embedding) console.log(`✅ Embedding generated for video ${videoId}`);
+
+                // ── STEP 6: Persist everything ───────────────────────────────
+                await Video.findByIdAndUpdate(videoId, {
+                    description: aiDescription,
+                    tags: mergedTags,
+                    transcript,
+                    hasSpeech,
+                    searchText,
+                    ...(embedding ? { embedding } : {}),
+                });
+                console.log(`🏁 Post-processing complete for video ${videoId}`);
             } catch (err) {
                 console.error(`⚠️ Post-processing failed for ${videoId}:`, err.message);
             }
@@ -235,7 +245,9 @@ router.get('/search', async (req, res) => {
                         $or: [
                             { title: { $in: regexes } },
                             { tags: { $in: regexes } },
-                            { description: { $in: regexes } }
+                            { description: { $in: regexes } },
+                            { transcript: { $in: regexes } },
+                            { searchText: { $in: regexes } },
                         ]
                     }).limit(10);
                     addToMap(exactMatches, 100); // 3 Kelimeyi Peş Peşe İçerenlere OLAĞANÜSTÜ BONUS!
@@ -293,6 +305,8 @@ router.get('/search', async (req, res) => {
                     { title: { $in: regexes } },
                     { tags: { $in: regexes } },
                     { description: { $in: regexes } },
+                    { transcript: { $in: regexes } },
+                    { searchText: { $in: regexes } },
                 ],
             }).sort({ relevanceScore: -1, createdAt: -1 }).limit(50);
         });

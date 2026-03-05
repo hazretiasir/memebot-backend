@@ -1,6 +1,9 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleAIFileManager } = require('@google/generative-ai/server');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY);
+
 
 // ─── Turkish character normalization ─────────────────────────────────────────
 const TR_MAP = { 'ş': 's', 'Ş': 'S', 'ü': 'u', 'Ü': 'U', 'ö': 'o', 'Ö': 'O', 'ç': 'c', 'Ç': 'C', 'ğ': 'g', 'Ğ': 'G', 'ı': 'i', 'İ': 'I' };
@@ -177,13 +180,16 @@ function _localGenerateTags(title) {
     return [...tags].filter(t => t.length > 1).slice(0, 10);
 }
 
-async function generateTags(title) {
+async function generateTags(title, transcript = '') {
     if (!process.env.GEMINI_API_KEY) return _localGenerateTags(title);
     try {
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        const transcriptHint = transcript
+            ? `\nVideodaki diyalog/konuşmalar:\n"${transcript.substring(0, 500)}"`
+            : '';
         const prompt = `Sen bir meme video etiketleme asistanısın. Aşağıdaki video başlığı için en iyi arama etiketlerini üret.
 
-Video başlığı: "${title}"
+Video başlığı: "${title}"${transcriptHint}
 
 Kurallar:
 - 6-8 etiket üret
@@ -206,7 +212,69 @@ Kurallar:
     }
 }
 
-// ─── Gemini Video-to-Text (Vision) ────────────────────────────────────────────
+// ─── Gemini Audio Transcription (File API) ────────────────────────────────────
+// Returns: { transcript: string, hasSpeech: boolean }
+async function generateTranscript(videoBuffer, mimeType = 'video/mp4', maxRetries = 3) {
+    if (!process.env.GEMINI_API_KEY) return { transcript: '', hasSpeech: false };
+
+    let lastErr;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        let uploadedFile = null;
+        try {
+            // 1. Upload video buffer to Gemini File API (temporary, auto-deleted after 48h)
+            const b64 = videoBuffer.toString('base64');
+            const uploadResp = await fileManager.uploadFile(
+                { inlineData: { mimeType, data: b64 } },
+                { mimeType, displayName: `memebot_transcribe_${Date.now()}` }
+            );
+            uploadedFile = uploadResp.file;
+
+            // Wait until file is ACTIVE
+            let file = uploadedFile;
+            while (file.state === 'PROCESSING') {
+                await new Promise(r => setTimeout(r, 2000));
+                file = await fileManager.getFile(file.name);
+            }
+            if (file.state !== 'ACTIVE') throw new Error(`File state: ${file.state}`);
+
+            // 2. Ask Gemini to transcribe speech
+            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+            const prompt = `Bu videoyu dinle ve içindeki TÜM Türkçe konuşmaları, diyalogları ve seslendirmeleri olduğu gibi yaz.
+Eğer hiç konuşma yoksa (sadece müzik, efekt veya sessizlik), tam olarak şunu yaz: KONUSMA_YOK
+Başka hiçbir açıklama ekleme, sadece konuşmaları yaz.`;
+
+            const result = await withTimeout(
+                model.generateContent([
+                    { fileData: { fileUri: file.uri, mimeType: file.mimeType } },
+                    prompt,
+                ]),
+                30000
+            );
+
+            const text = result.response.text().trim();
+            const hasSpeech = text !== 'KONUSMA_YOK' && text.length > 3;
+            const transcript = hasSpeech ? text : '';
+
+            console.log(`🎙️  Transcript [attempt ${attempt}]: hasSpeech=${hasSpeech}, length=${transcript.length}`);
+
+            // 3. Delete uploaded file from Gemini (optional cleanup)
+            try { await fileManager.deleteFile(uploadedFile.name); } catch (_) { }
+
+            return { transcript, hasSpeech };
+
+        } catch (err) {
+            lastErr = err;
+            if (uploadedFile) { try { await fileManager.deleteFile(uploadedFile.name); } catch (_) { } }
+            console.warn(`⚠️  Transcript attempt ${attempt}/${maxRetries} failed: ${err.message.slice(0, 80)}`);
+            if (attempt < maxRetries) await new Promise(r => setTimeout(r, 3000 * attempt));
+        }
+    }
+
+    console.error(`❌ Transcript failed after ${maxRetries} attempts: ${lastErr?.message}`);
+    return { transcript: '', hasSpeech: false };
+}
+
+// ─── Gemini Video-to-Text (Vision from thumbnail) ────────────────────────────
 async function generateVideoDescription(imageBuffer, mimeType = 'image/jpeg') {
     if (!process.env.GEMINI_API_KEY) return null;
     try {
@@ -230,7 +298,7 @@ Bu sahnede tam olarak ne oluyor?
 
         const result = await model.generateContent([prompt, imagePart]);
         const description = result.response.text().trim();
-        console.log(`👁️ Vision Description: "${description.substring(0, 100)}..."`);
+        console.log(`👁️  Vision Description: "${description.substring(0, 100)}..."`);
         return description;
     } catch (err) {
         console.warn(`⚠️  Vision API failed: ${err.message.slice(0, 80)}`);
@@ -238,4 +306,4 @@ Bu sahnede tam olarak ne oluyor?
     }
 }
 
-module.exports = { expandQuery, generateEmbedding, generateTags, generateVideoDescription };
+module.exports = { expandQuery, generateEmbedding, generateTags, generateVideoDescription, generateTranscript };

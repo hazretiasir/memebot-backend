@@ -6,7 +6,7 @@ const axios = require('axios');
 const FormData = require('form-data');
 const ffmpegPath = require('ffmpeg-static');
 
-const TARGET_ACCOUNT = 'yalcdb';
+const TARGET_ACCOUNT = process.argv[2] || 'yalcdb';
 const TARGET_URL = `https://x.com/${TARGET_ACCOUNT}/media`;
 const UPLOAD_URL = 'http://localhost:3000/api/videos/upload';
 const DB_FILE = path.join(__dirname, `scraped_tweets_${TARGET_ACCOUNT}.json`);
