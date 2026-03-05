@@ -38,8 +38,8 @@ router.post('/download', async (req, res) => {
             noWarnings: true,
             noCheckCertificates: true,
             noPlaylist: true,
-            // Single pre-merged file — no ffmpeg needed
-            format: isAudio ? 'bestaudio[ext=m4a]/bestaudio' : 'best[ext=mp4]/best',
+            // No format restriction — let yt-dlp pick the best available
+            format: isAudio ? 'bestaudio[ext=m4a]/bestaudio/bestaudio' : 'best',
         };
 
         if (fs.existsSync(COOKIES_PATH)) {
@@ -57,7 +57,7 @@ router.post('/download', async (req, res) => {
             return res.status(500).json({ error: 'Could not extract direct URL' });
         }
 
-        const ext = isAudio ? 'm4a' : 'mp4';
+        const ext = info.ext || (isAudio ? 'm4a' : 'mp4');
         const safeTitle = (info.title || 'MemeBot_Video').replace(/[^a-z0-9_\- ]/gi, '_').substring(0, 60);
 
         console.log(`[Downloader] CDN URL resolved for: ${safeTitle}`);
