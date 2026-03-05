@@ -101,6 +101,12 @@ videoSchema.index({ title: 'text', description: 'text', tags: 'text', transcript
 //   2. Engagement    — log(views + downloads + 1)  (depth of interaction)
 //   3. Time decay    — recently uploaded videos get a mild initial boost
 videoSchema.methods.recalculateScore = function () {
+    // 0. Logical Enforcer: A video must have been viewed at least as many times as it was interacted with
+    const totalInteractions = this.likes + this.dislikes + this.searchUpvotes + this.searchDownvotes;
+    if (this.viewCount < totalInteractions) {
+        this.viewCount = totalInteractions;
+    }
+
     const n = this.searchUpvotes + this.searchDownvotes;   // total SEARCH votes
 
     // 1. Wilson Score (95% confidence lower bound)
