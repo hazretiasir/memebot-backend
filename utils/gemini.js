@@ -260,7 +260,7 @@ async function generateTranscript(videoBuffer, mimeType = 'video/mp4', maxRetrie
             audioTmpPath = null;
 
             // 4. Send MP3 directly inline to Gemini (No File API needed!)
-            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+            const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
             const prompt = `Bu sesi dinle ve içindeki TÜM Türkçe konuşmaları, diyalogları ve seslendirmeleri olduğu gibi yaz.
 Eğer hiç konuşma yoksa (sadece müzik, efekt veya sessizlik), tam olarak şunu yaz: KONUSMA_YOK
 Başka hiçbir açıklama ekleme, sadece konuşmaları yaz.`;
