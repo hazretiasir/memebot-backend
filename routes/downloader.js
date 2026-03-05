@@ -8,10 +8,17 @@ const { v4: uuidv4 } = require('uuid');
 
 // ─── Write YouTube cookies once at startup ────────────────────────────────────
 const COOKIES_PATH = path.join(os.tmpdir(), 'yt_cookies.txt');
-if (process.env.YOUTUBE_COOKIES) {
-    fs.writeFileSync(COOKIES_PATH, process.env.YOUTUBE_COOKIES, 'utf8');
-    console.log('[Downloader] YouTube cookies loaded from env.');
-}
+(function initCookies() {
+    const b64 = process.env.YOUTUBE_COOKIES_B64;
+    const raw = process.env.YOUTUBE_COOKIES;
+    if (b64) {
+        fs.writeFileSync(COOKIES_PATH, Buffer.from(b64, 'base64').toString('utf8'), 'utf8');
+        console.log('[Downloader] YouTube cookies loaded from base64 env.');
+    } else if (raw) {
+        fs.writeFileSync(COOKIES_PATH, raw, 'utf8');
+        console.log('[Downloader] YouTube cookies loaded from raw env.');
+    }
+})();
 
 // ─── POST /api/downloader/download ───────────────────────────────────────────
 router.post('/download', async (req, res) => {
