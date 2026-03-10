@@ -1,146 +1,68 @@
 const express = require('express');
 const router = express.Router();
 const youtubedl = require('youtube-dl-exec');
-const path = require('path');
-const os = require('os');
-const fs = require('fs');
 
-// ─── Cookie setup ─────────────────────────────────────────────────────────────
-const COOKIES_PATH = path.join(os.tmpdir(), 'yt_cookies.txt');
-(function initCookies() {
-    const b64 = process.env.YOUTUBE_COOKIES_B64;
-    const raw = process.env.YOUTUBE_COOKIES;
-    if (b64) {
-        try {
-            fs.writeFileSync(COOKIES_PATH, Buffer.from(b64, 'base64').toString('utf8'), 'utf8');
-            console.log('[Downloader] Cookies loaded (base64), size:', fs.statSync(COOKIES_PATH).size);
-        } catch (e) { console.error('[Downloader] Cookie write error:', e.message); }
-    } else if (raw) {
-        fs.writeFileSync(COOKIES_PATH, raw, 'utf8');
-        console.log('[Downloader] Cookies loaded (raw)');
-    } else {
-        console.log('[Downloader] No cookies env found');
-    }
-})();
-
-// ─── yt-dlp extraction ────────────────────────────────────────────────────────
-async function tryYtdlp(url, isAudio) {
-    // Try multiple player clients — different ones evade bot detection differently
-    const clientCombos = [
-        'ios,android_music',
-        'tv_embedded,ios',
-        'android_embedded,ios',
-        'web_embedded,ios',
-    ];
-
-    for (const clients of clientCombos) {
-        try {
-            console.log(`[Downloader] yt-dlp attempt with player_client=${clients}`);
-            const options = {
-                dumpSingleJson: true,
-                noWarnings: true,
-                noCheckCertificates: true,
-                noPlaylist: true,
-                format: isAudio ? 'bestaudio[ext=m4a]/bestaudio' : 'best',
-                extractorArgs: `youtube:player_client=${clients}`,
-            };
-            if (fs.existsSync(COOKIES_PATH)) options.cookies = COOKIES_PATH;
-
-            const info = await youtubedl(url, options);
-            const directUrl = info.url || info.requested_formats?.[0]?.url;
-            if (directUrl) {
-                console.log(`[Downloader] yt-dlp success with ${clients}`);
-                return { downloadUrl: directUrl, ext: info.ext || (isAudio ? 'm4a' : 'mp4'), title: info.title };
-            }
-        } catch (e) {
-            console.log(`[Downloader] yt-dlp(${clients}) failed: ${e.message?.substring(0, 120)}`);
-        }
-    }
-    return null;
-}
-
-// ─── Cobalt fallback ──────────────────────────────────────────────────────────
-const COBALT_INSTANCES = [
-    'https://cobalt.api.timelessnesses.me/',
-    'https://cobalt.pinapelz.moe/',
-    'https://cob.freetard.eu.org/',
-];
-
-async function tryCobalt(url, isAudio) {
-    const body = JSON.stringify({
-        url,
-        videoQuality: '1080',
-        audioFormat: isAudio ? 'mp3' : 'best',
-        filenameStyle: 'basic',
-        downloadMode: isAudio ? 'audio' : 'auto',
-    });
-
-    for (const instance of COBALT_INSTANCES) {
-        try {
-            const resp = await fetch(instance, {
-                method: 'POST',
-                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-                body,
-                signal: AbortSignal.timeout(12000),
-            });
-            const data = await resp.json();
-            if (data.url) {
-                console.log(`[Downloader] cobalt success: ${instance}`);
-                return { downloadUrl: data.url };
-            }
-            if (data.status === 'picker' && data.picker?.[0]?.url) {
-                return { downloadUrl: data.picker[0].url };
-            }
-            console.log(`[Downloader] cobalt ${instance} → ${data.status || data.error?.code}`);
-        } catch (e) {
-            console.log(`[Downloader] cobalt ${instance} failed: ${e.message}`);
-        }
-    }
-    return null;
-}
-
-// ─── Unsupported platforms ─────────────────────────────────────────────────────
-function isUnsupported(url) {
-    return /youtube\.com|youtu\.be|tiktok\.com|tiktokcdn/i.test(url);
-}
-
-function getReferer(originalUrl) {
-    if (/instagram\.com/i.test(originalUrl)) return 'https://www.instagram.com/';
-    if (/twitter\.com|x\.com/i.test(originalUrl)) return 'https://twitter.com/';
-    if (/pinterest\./i.test(originalUrl))    return 'https://www.pinterest.com/';
-    if (/reddit\.com/i.test(originalUrl))    return 'https://www.reddit.com/';
-    return null;
-}
-
-// ─── POST /api/downloader/download ────────────────────────────────────────────
+// ─── POST /api/downloader/download ───────────────────────────────────────────
+// Backend is a **URL resolver only** — it finds the direct CDN link and hands
+// it back to the Flutter client, which downloads the file itself. This keeps
+// the Render server completely free of disk & bandwidth load.
 router.post('/download', async (req, res) => {
     const { url, format } = req.body;
     if (!url) return res.status(400).json({ error: 'URL is required' });
 
-    if (isUnsupported(url)) {
-        return res.status(400).json({
-            error: 'YouTube ve TikTok desteklenmiyor. Instagram, Twitter, Pinterest veya Reddit linklerini deneyin.',
-        });
-    }
-
     const isAudio = format === 'mp3';
-    console.log(`[Downloader] Request: ${url}`);
+    console.log(`[Downloader] Resolving URL for: ${url} (format: ${format ?? 'mp4'})`);
 
-    let result = await tryYtdlp(url, isAudio);
-    if (!result) result = await tryCobalt(url, isAudio);
+    try {
+        // Pull full JSON metadata without downloading anything
+        const info = await youtubedl(url, {
+            dumpSingleJson: true,
+            noWarnings: true,
+            noCheckCertificates: true,
+            // Prefer a single-stream progressive MP4 so the client can play it
+            // without needing FFmpeg for merging. Falls back to best available.
+            format: isAudio
+                ? 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio'
+                : 'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
+        });
 
-    if (!result) {
+        // Resolve the best direct URL from the metadata
+        let downloadUrl = info.url; // single-stream URL (most platforms)
+
+        if (!downloadUrl && Array.isArray(info.formats) && info.formats.length > 0) {
+            // Pick the highest-quality format that has a direct URL
+            const withUrls = info.formats.filter((f) => !!f.url);
+            const preferred = withUrls
+                .filter((f) => isAudio ? f.vcodec === 'none' : f.acodec !== 'none')
+                .pop();
+            downloadUrl = preferred?.url ?? withUrls.pop()?.url;
+        }
+
+        if (!downloadUrl) {
+            return res.status(422).json({
+                error: 'Bu platform için doğrudan URL çözümlenemedi. Lütfen başka bir link deneyin.',
+            });
+        }
+
+        // Build a clean filename
+        const ext = isAudio ? 'm4a' : 'mp4';
+        const safeTitle = (info.title ?? 'video')
+            .replace(/[^\w\-_\u00C0-\u024F]/g, '_')
+            .replace(/_+/g, '_')
+            .substring(0, 60)
+            .trim();
+        const filename = `${safeTitle}.${ext}`;
+        const referer = info.webpage_url ?? url;
+
+        console.log(`[Downloader] ✅ Resolved: ${filename}`);
+        return res.json({ downloadUrl, filename, referer });
+    } catch (err) {
+        console.error('[Downloader] ❌ Error:', err.message);
         return res.status(500).json({
-            error: 'Bu video indirilemedi. Lütfen daha sonra tekrar deneyin.',
+            error: 'Video URL çözümlenemedi',
+            details: err.message,
         });
     }
-
-    const ext = isAudio ? 'mp3' : (result.ext || 'mp4');
-    res.json({
-        downloadUrl: result.downloadUrl,
-        filename: `MemeBot.${ext}`,
-        referer: getReferer(url),
-    });
 });
 
 module.exports = router;
