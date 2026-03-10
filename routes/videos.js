@@ -200,6 +200,51 @@ router.get('/suggest-tags', async (req, res) => {
     }
 });
 
+// ─── GET /api/videos/suggestions?q=... ──────────────────────────────────────
+// Returns real search suggestions from actual video titles + tags (no AI cost)
+router.get('/suggestions', async (req, res) => {
+    const { q } = req.query;
+    if (!q || q.trim().length < 2) return res.json({ suggestions: [] });
+
+    // Escape regex special characters for safety
+    const escaped = q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escaped, 'i');
+
+    try {
+        const [titleMatches, tagMatches] = await Promise.all([
+            // Titles that contain the query
+            Video.find({ title: regex })
+                .select('title')
+                .sort({ relevanceScore: -1 })
+                .limit(5)
+                .lean(),
+            // Tags that contain the query (from popular videos)
+            Video.find({ tags: { $elemMatch: { $regex: escaped, $options: 'i' } } })
+                .select('tags')
+                .sort({ relevanceScore: -1 })
+                .limit(8)
+                .lean(),
+        ]);
+
+        const suggestions = new Set();
+
+        // Add matching titles
+        titleMatches.forEach((v) => suggestions.add(v.title));
+
+        // Add individual matching tags
+        tagMatches.forEach((v) => {
+            (v.tags || []).forEach((tag) => {
+                if (regex.test(tag)) suggestions.add(tag);
+            });
+        });
+
+        res.json({ suggestions: [...suggestions].slice(0, 8) });
+    } catch (err) {
+        console.error('[Suggestions] Error:', err.message);
+        res.json({ suggestions: [] }); // Graceful degradation
+    }
+});
+
 // ─── GET /api/videos/search?q=...&limit=5 ────────────────────────────────────
 router.get('/search', async (req, res) => {
     const { q, limit = 1, page = 1, excludeIds } = req.query;
