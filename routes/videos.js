@@ -226,19 +226,32 @@ router.get('/suggestions', async (req, res) => {
                 .lean(),
         ]);
 
-        const suggestions = new Set();
+        const suggestions = [];       // final ordered list (preserves title casing)
+        const seenNormalized = new Set(); // for case-insensitive dedup
 
-        // Add matching titles
-        titleMatches.forEach((v) => suggestions.add(v.title));
+        // Titles first (higher quality signal, better capitalization)
+        titleMatches.forEach((v) => {
+            const key = v.title.toLowerCase().trim();
+            if (!seenNormalized.has(key)) {
+                seenNormalized.add(key);
+                suggestions.push(v.title);
+            }
+        });
 
-        // Add individual matching tags
+        // Tags second — only add if not already represented by title
         tagMatches.forEach((v) => {
             (v.tags || []).forEach((tag) => {
-                if (regex.test(tag)) suggestions.add(tag);
+                if (regex.test(tag)) {
+                    const key = tag.toLowerCase().trim();
+                    if (!seenNormalized.has(key)) {
+                        seenNormalized.add(key);
+                        suggestions.push(tag);
+                    }
+                }
             });
         });
 
-        res.json({ suggestions: [...suggestions].slice(0, 8) });
+        res.json({ suggestions: suggestions.slice(0, 8) });
     } catch (err) {
         console.error('[Suggestions] Error:', err.message);
         res.json({ suggestions: [] }); // Graceful degradation
