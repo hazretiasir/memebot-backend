@@ -44,8 +44,8 @@ mongoose
     });
 
 // ─── Automated Tasks ────────────────────────────────────────────────────────
-// Run the auto scraper twice a day: at 08:00 AM and 20:00 (8:00 PM)
-cron.schedule('0 8,20 * * *', () => {
+// Run the auto scraper temporarily every 3 minutes for testing
+cron.schedule('*/3 * * * *', () => {
     console.log(`[CRON] Running auto_scraper.js at ${new Date().toISOString()}`);
     // We spawn it as a child process so it doesn't block the main event loop
     // and correctly loads all its puppeteer environment safely.
