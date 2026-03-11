@@ -260,6 +260,24 @@ router.get('/suggestions', async (req, res) => {
     }
 });
 
+// ─── GET /api/videos/check?url=...&title=... ────────────────────────────
+// Checks if a video already exists by its source URL or exact title
+router.get('/check', async (req, res) => {
+    const { url, title } = req.query;
+    try {
+        const query = { $or: [] };
+        if (url) query.$or.push({ tweetUrl: url });
+        if (title) query.$or.push({ title: { $regex: `^${title.trim()}$`, $options: 'i' } });
+
+        if (query.$or.length === 0) return res.json({ exists: false });
+
+        const video = await Video.findOne(query).select('_id title tweetUrl');
+        res.json({ exists: !!video, video });
+    } catch (err) {
+        res.status(500).json({ exists: false, error: err.message });
+    }
+});
+
 // ─── GET /api/videos/search?q=...&limit=5 ────────────────────────────────────
 router.get('/search', async (req, res) => {
     const { q, limit = 1, page = 1, excludeIds } = req.query;
