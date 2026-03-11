@@ -8,7 +8,8 @@ const ffmpegPath = require('ffmpeg-static');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const TARGET_ACCOUNTS = ['yalcdb', 'videolarsivi', 'BelalArsiv'];
-const UPLOAD_URL = 'http://localhost:3000/api/videos/upload';
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
+const UPLOAD_URL = `${API_BASE_URL}/api/videos/upload`;
 const DELAY_BETWEEN_UPLOADS = 5000;
 const MAX_VIDEOS_PER_ACCOUNT = 50;
 
@@ -127,7 +128,7 @@ async function downloadAndUpload(targetAccount, tweetUrls, baseProgress) {
     let existingTitles = new Set();
     try {
         console.log(`🔍 Tüm veritabanı başlıkları taranıyor (Çifte yüklemeyi önlemek için)...`);
-        const res = await axios.get('http://localhost:3000/api/videos?limit=50000');
+        const res = await axios.get(`${API_BASE_URL}/api/videos?limit=50000`);
         res.data.videos.forEach(v => {
             if (v.title && v.title.length > 3) existingTitles.add(v.title.toLowerCase());
         });
