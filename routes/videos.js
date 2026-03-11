@@ -627,6 +627,16 @@ router.post('/batch', async (req, res) => {
     }
 });
 
+// ─── GET /api/videos/count ───────────────────────────────────────────────────
+router.get('/count', async (req, res) => {
+    try {
+        const count = await Video.countDocuments();
+        res.json({ count });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to get count' });
+    }
+});
+
 // ─── GET /api/videos ─────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
     try {
