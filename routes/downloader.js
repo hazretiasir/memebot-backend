@@ -52,13 +52,21 @@ router.post('/download', async (req, res) => {
             .substring(0, 60)
             .trim();
 
-        // Give Android the raw stream file and instruct the frontend to save it natively.
-        // E.g if it's m4a, let it be an m4a file. Forcing extensions or piping breaks Android's media scanners.
-        const filename = `${safeTitle}.${ext}`;
-        const referer = info.webpage_url ?? url;
+        // Instead of giving Android a raw M3U8/AAC Twitter stream (which crashes Android's file player),
+        // We will tell flutter to download from our server, and our server will proxy/transcode it safely to temp disk.
+        let finalDownloadUrl = downloadUrl;
+        let finalFilename = `${safeTitle}.${isAudio ? 'mp3' : ext}`;
 
-        console.log(`[Downloader] ✅ Resolved: ${filename}`);
-        return res.json({ downloadUrl: downloadUrl, filename: filename, referer: referer });
+        if (isAudio) {
+            // Tell the flutter app to hit a new Proxy endpoint on our backend which handles the entire transcode securely.
+            // Use the current host to build the proxy URL
+            const host = req.get('host') || 'localhost:3000';
+            const protocol = req.protocol || 'https';
+            finalDownloadUrl = `${protocol}://${host}/api/downloader/proxy-audio?url=${encodeURIComponent(downloadUrl)}`;
+        }
+
+        console.log(`[Downloader] ✅ Resolved: ${finalFilename}`);
+        return res.json({ downloadUrl: finalDownloadUrl, filename: finalFilename, referer: info.webpage_url ?? url });
     } catch (err) {
         console.error('[Downloader] ❌ Error:', err.message);
         return res.status(500).json({
@@ -66,6 +74,46 @@ router.post('/download', async (req, res) => {
             details: err.message,
         });
     }
+});
+
+// ─── GET /api/downloader/proxy-audio ─────────────────────────────────────────
+// Downloads the raw fragmented audio stream (like Twitter M3U8/AAC) and transcodes
+// it into a clean MP3 file on the server's temp disk. Then sends the file with
+// exact Content-Length so Android DownloadManager doesn't crash on playback.
+const ffmpeg = require('fluent-ffmpeg');
+const ffmpegPath = require('ffmpeg-static');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+ffmpeg.setFfmpegPath(ffmpegPath);
+
+router.get('/proxy-audio', (req, res) => {
+    const { url } = req.query;
+    if (!url) return res.status(400).send('URL is required');
+
+    const tempFile = path.join(os.tmpdir(), `MemeBot_Audio_${Date.now()}.mp3`);
+
+    console.log(`[Downloader Proxy] Transcoding Audio to TEMP MP3 -> ${url.substring(0, 50)}...`);
+
+    ffmpeg(url)
+        .noVideo()
+        .audioCodec('libmp3lame')
+        .audioBitrate('128k')
+        .format('mp3')
+        .on('error', (err) => {
+            console.error('[FFmpeg Proxy Error]:', err.message);
+            if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+            if (!res.headersSent) res.status(500).end();
+        })
+        .on('end', () => {
+            console.log('[Downloader Proxy] Transcoding complete. Sending file...');
+            res.download(tempFile, 'MemeBot_Audio.mp3', (err) => {
+                if (err) console.error('[Downloader Proxy] Send error:', err);
+                // Cleanup temp file after streaming it completely
+                if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+            });
+        })
+        .save(tempFile);
 });
 
 module.exports = router;
