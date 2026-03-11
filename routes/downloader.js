@@ -1,40 +1,52 @@
 const express = require('express');
 const router = express.Router();
 const youtubedl = require('youtube-dl-exec');
+const ffmpegPath = require('ffmpeg-static');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 
 // ─── POST /api/downloader/download ───────────────────────────────────────────
-// Backend is a **URL resolver only** — it finds the direct CDN link and hands
-// it back to the Flutter client, which downloads the file itself. This keeps
-// the Render server completely free of disk & bandwidth load.
+// For VIDEO: resolves direct CDN URL via yt-dlp → Flutter downloads from CDN.
+// For AUDIO: skips metadata step, immediately returns a proxy-audio URL with
+//            the original platform URL. yt-dlp handles Twitter auth inside proxy.
 router.post('/download', async (req, res) => {
     const { url, format } = req.body;
     if (!url) return res.status(400).json({ error: 'URL is required' });
 
     const isAudio = format === 'mp3';
-    console.log(`[Downloader] Resolving URL for: ${url} (format: ${format ?? 'mp4'})`);
+    console.log(`[Downloader] Request: ${url} (format: ${format ?? 'mp4'})`);
 
     try {
-        // Pull full JSON metadata without downloading anything
+        if (isAudio) {
+            // Don't pre-resolve CDN URL for audio — Twitter CDN blocks raw server
+            // requests. Let proxy-audio run yt-dlp with the original URL instead.
+            const protocol = req.headers['x-forwarded-proto'] || 'https';
+            const host = req.get('host');
+            const proxyUrl = `${protocol}://${host}/api/downloader/proxy-audio?url=${encodeURIComponent(url)}`;
+            console.log(`[Downloader] ✅ Audio → proxy route`);
+            return res.json({
+                downloadUrl: proxyUrl,
+                filename: 'MemeBot_Audio.mp3',
+                referer: url,
+            });
+        }
+
+        // ── VIDEO: resolve direct CDN URL ─────────────────────────────────────
         const info = await youtubedl(url, {
             dumpSingleJson: true,
             noWarnings: true,
             noCheckCertificates: true,
-            // Just get the best available. Forcing ext=mp3 on fetch often fails
-            // because no platform natively hosts raw mp3.
-            format: isAudio ? 'bestaudio/best' : 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            format: 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         });
 
-        // Resolve the best direct URL from the metadata
-        let downloadUrl = info.url; // single-stream URL (most platforms)
-
+        let downloadUrl = info.url;
         if (!downloadUrl && Array.isArray(info.formats) && info.formats.length > 0) {
-            // Pick the highest-quality format that has a direct URL
             const withUrls = info.formats.filter((f) => !!f.url);
             const preferred = withUrls
-                .filter((f) => isAudio ? (f.vcodec === 'none' || f.acodec !== 'none') : (f.vcodec !== 'none' && f.acodec !== 'none'))
+                .filter((f) => f.vcodec !== 'none' && f.acodec !== 'none')
                 .pop();
             downloadUrl = preferred?.url ?? withUrls.pop()?.url;
-            if (isAudio && preferred && preferred.ext) info.ext = preferred.ext;
         }
 
         if (!downloadUrl) {
@@ -43,81 +55,91 @@ router.post('/download', async (req, res) => {
             });
         }
 
-        // Extract extension and safe title
-        let ext = info.ext || (isAudio ? 'm4a' : 'mp4');
+        const ext = info.ext || 'mp4';
         const safeTitle = (info.title ?? 'video')
             .replace(/[^\w\-_\u00C0-\u024F]/g, '_')
             .replace(/_+/g, '_')
             .substring(0, 60)
             .trim();
 
-        // Instead of giving Android a raw M3U8/AAC Twitter stream (which crashes Android's file player),
-        // We will tell flutter to download from our server, and our server will proxy/transcode it safely to temp disk.
-        let finalDownloadUrl = downloadUrl;
-        let finalFilename = `${safeTitle}.${isAudio ? 'mp3' : ext}`;
-
-        if (isAudio) {
-            // Render usually has 'x-forwarded-proto' header for https
-            const protocol = req.headers['x-forwarded-proto'] || 'https';
-            const host = req.get('host');
-            finalDownloadUrl = `${protocol}://${host}/api/downloader/proxy-audio?url=${encodeURIComponent(downloadUrl)}`;
-        }
-
-        console.log(`[Downloader] ✅ Resolved: ${finalFilename}`);
-        return res.json({ downloadUrl: finalDownloadUrl, filename: finalFilename, referer: info.webpage_url ?? url });
+        console.log(`[Downloader] ✅ Video resolved: ${safeTitle}.${ext}`);
+        return res.json({
+            downloadUrl,
+            filename: `${safeTitle}.${ext}`,
+            referer: info.webpage_url ?? url,
+        });
     } catch (err) {
         console.error('[Downloader] ❌ Error:', err.message);
         return res.status(500).json({
             error: 'Video bilgileri alınamadı (API Hatası)',
             details: err.message,
-            tip: 'Linkin doğruluğunu kontrol edin veya sunucuyu yeniden başlatın.'
+            tip: 'Linkin doğruluğunu kontrol edin veya sunucuyu yeniden başlatın.',
         });
     }
 });
 
 // ─── GET /api/downloader/proxy-audio ─────────────────────────────────────────
-// Downloads the raw fragmented audio stream (like Twitter M3U8/AAC) and transcodes
-// it into a clean MP3 file on the server's temp disk. Then sends the file with
-// exact Content-Length so Android DownloadManager doesn't crash on playback.
-const ffmpeg = require('fluent-ffmpeg');
-const ffmpegPath = require('ffmpeg-static');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-ffmpeg.setFfmpegPath(ffmpegPath);
-
-router.get('/proxy-audio', (req, res) => {
+// Receives the ORIGINAL platform URL (e.g. twitter.com/…/video/1).
+// Uses yt-dlp (with its built-in Twitter extractor + HLS support) to download
+// the best audio and convert to clean MP3 via ffmpeg-static.
+// Sends the file with Content-Length so Android can play it without issues.
+router.get('/proxy-audio', async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).send('URL is required');
 
-    const tempFile = path.join(os.tmpdir(), `MemeBot_Audio_${Date.now()}.mp3`);
+    const tempId   = Date.now();
+    const tempDir  = os.tmpdir();
+    // yt-dlp will produce: tempBase.mp3  (after --extract-audio --audio-format mp3)
+    const tempBase = path.join(tempDir, `MemeBot_${tempId}`);
+    const tempMp3  = `${tempBase}.mp3`;
 
-    console.log(`[Downloader Proxy] Transcoding Audio to TEMP MP3 -> ${url.substring(0, 50)}...`);
+    console.log(`[Proxy Audio] yt-dlp download starting: ${url.substring(0, 70)}...`);
 
-    ffmpeg()
-        .input(url)
-        .inputOptions([
-            '-headers',
-            `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\nReferer: https://twitter.com/\r\n`
-        ])
-        .noVideo()
-        .audioCodec('libmp3lame')
-        .audioBitrate('128k')
-        .format('mp3')
-        .on('error', (err) => {
-            console.error('[FFmpeg Proxy Error]:', err.message);
-            if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
-            if (!res.headersSent) res.status(500).end();
-        })
-        .on('end', () => {
-            console.log('[Downloader Proxy] Transcoding complete. Sending file...');
-            res.download(tempFile, 'MemeBot_Audio.mp3', (err) => {
-                if (err) console.error('[Downloader Proxy] Send error:', err);
-                // Cleanup temp file after streaming it completely
-                if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+    try {
+        await youtubedl(url, {
+            // Output template: yt-dlp downloads native format, converts → .mp3
+            output: `${tempBase}.%(ext)s`,
+            extractAudio: true,
+            audioFormat: 'mp3',
+            audioBitrate: '128',
+            noWarnings: true,
+            noCheckCertificates: true,
+            // Point yt-dlp at the bundled ffmpeg-static binary
+            ffmpegLocation: ffmpegPath,
+        });
+
+        if (!fs.existsSync(tempMp3)) {
+            console.error('[Proxy Audio] MP3 not found after yt-dlp. Listing temp dir...');
+            const candidates = fs.readdirSync(tempDir).filter(f => f.startsWith(`MemeBot_${tempId}`));
+            console.error('[Proxy Audio] Candidates:', candidates);
+            return res.status(500).json({ error: 'Ses dosyası oluşturulamadı. Lütfen tekrar deneyin.' });
+        }
+
+        console.log(`[Proxy Audio] ✅ MP3 ready. Sending to client...`);
+
+        // res.download sets Content-Length from file stat → Android plays cleanly
+        res.download(tempMp3, 'MemeBot_Audio.mp3', (err) => {
+            if (err) console.error('[Proxy Audio] Send error:', err.message);
+            // Clean up temp file and any intermediate files yt-dlp left behind
+            fs.readdirSync(tempDir)
+                .filter(f => f.startsWith(`MemeBot_${tempId}`))
+                .forEach(f => { try { fs.unlinkSync(path.join(tempDir, f)); } catch {} });
+        });
+
+    } catch (err) {
+        console.error('[Proxy Audio] ❌ yt-dlp error:', err.message);
+        // Cleanup on error
+        fs.readdirSync(tempDir)
+            .filter(f => f.startsWith(`MemeBot_${tempId}`))
+            .forEach(f => { try { fs.unlinkSync(path.join(tempDir, f)); } catch {} });
+
+        if (!res.headersSent) {
+            res.status(500).json({
+                error: 'Ses indirilemedi',
+                details: err.message,
             });
-        })
-        .save(tempFile);
+        }
+    }
 });
 
 module.exports = router;
