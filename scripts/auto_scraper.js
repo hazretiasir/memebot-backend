@@ -49,6 +49,17 @@ async function scrapeTweetLinks(browser, targetAccount, baseProgress) {
         httpOnly: true
     });
 
+    // OPTIMIZATION FOR RENDER: Block images, css, and fonts to save RAM
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+        const type = req.resourceType();
+        if (['image', 'stylesheet', 'font', 'media'].includes(type)) {
+            req.abort();
+        } else {
+            req.continue();
+        }
+    });
+
     let allStatusUrls = new Set();
 
     // Listen to background network traffic
@@ -78,7 +89,8 @@ async function scrapeTweetLinks(browser, targetAccount, baseProgress) {
     });
 
     // networkidle2: redirect tamamlandıktan sonra bekle (domcontentloaded frame detach'e yol açıyor)
-    await page.goto(TARGET_URL, { waitUntil: 'networkidle2', timeout: 90000 });
+    // OPTIMIZATION FOR RENDER: Changed to 'domcontentloaded' to avoid strict 90s timeout on heavy pages
+    await page.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
     await sleep(4000);
 
     let scrolls = 0;
