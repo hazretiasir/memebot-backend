@@ -33,4 +33,4 @@ jobs:
           # Production API URL
           API_BASE_URL: https://memebot-backend-jxd7.onrender.com
           NODE_ENV: production
-        run: node scripts/auto_scraper.js
+        run: node scripts/auto_scraper_v2.js
