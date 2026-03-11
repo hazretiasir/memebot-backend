@@ -44,23 +44,22 @@ router.post('/download', async (req, res) => {
             });
         }
 
-        // Determine real extension from metadata or direct URL to prevent codec mismatch
-        let ext = info.ext || (isAudio ? 'm4a' : 'mp4');
-        if (downloadUrl.includes('.mp3')) ext = 'mp3';
-        else if (downloadUrl.includes('.webm')) ext = 'webm';
-        else if (downloadUrl.includes('.m4a') && ext !== 'mp3') ext = 'm4a';
-        else if (downloadUrl.includes('.aac')) ext = 'aac';
+        // Instead of giving Android a raw M3U8/AAC Twitter stream (which crashes Android's file player),
+        // We will tell flutter to download from our server, and our server will proxy/transcode it safely.
 
-        const safeTitle = (info.title ?? 'video')
-            .replace(/[^\w\-_\u00C0-\u024F]/g, '_')
-            .replace(/_+/g, '_')
-            .substring(0, 60)
-            .trim();
-        const filename = `${safeTitle}.${ext}`;
-        const referer = info.webpage_url ?? url;
+        let finalDownloadUrl = downloadUrl;
+        let finalFilename = `${safeTitle}.${isAudio ? 'mp3' : ext}`;
 
-        console.log(`[Downloader] ✅ Resolved: ${filename}`);
-        return res.json({ downloadUrl, filename, referer });
+        if (isAudio) {
+            // Tell the flutter app to hit a new Proxy endpoint on our backend which pipes FFmpeg
+            // Use the current host to build the proxy URL
+            const host = req.get('host') || 'localhost:3000';
+            const protocol = req.protocol || 'https';
+            finalDownloadUrl = `${protocol}://${host}/api/downloader/proxy-audio?url=${encodeURIComponent(downloadUrl)}`;
+        }
+
+        console.log(`[Downloader] ✅ Resolved: ${finalFilename}`);
+        return res.json({ downloadUrl: finalDownloadUrl, filename: finalFilename, referer: info.webpage_url ?? url });
     } catch (err) {
         console.error('[Downloader] ❌ Error:', err.message);
         return res.status(500).json({
@@ -68,6 +67,39 @@ router.post('/download', async (req, res) => {
             details: err.message,
         });
     }
+});
+
+// ─── GET /api/downloader/proxy-audio ─────────────────────────────────────────
+// Streams a raw fragmented audio stream (like Twitter M3U8/AAC) and transcodes
+// it into a clean MP3 so Android DownloadManager doesn't crash on playback.
+const ffmpeg = require('fluent-ffmpeg');
+const ffmpegPath = require('ffmpeg-static');
+ffmpeg.setFfmpegPath(ffmpegPath);
+
+router.get('/proxy-audio', (req, res) => {
+    const { url } = req.query;
+    if (!url) return res.status(400).send('URL is required');
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Content-Disposition', 'attachment; filename="MemeBot_Audio.mp3"');
+
+    console.log(`[Downloader Proxy] Transcoding Audio to MP3 -> ${url.substring(0, 50)}...`);
+
+    const command = ffmpeg(url)
+        .noVideo()
+        .audioCodec('libmp3lame')
+        .audioBitrate('128k')
+        .format('mp3')
+        .on('error', (err) => {
+            console.error('[FFmpeg Proxy Error]:', err.message);
+            if (!res.headersSent) res.status(500).end();
+        })
+        .on('end', () => {
+            console.log('[Downloader Proxy] Transcoding complete.');
+        });
+
+    // Pipe the transcoded mp3 stream directly into the HTTP response buffer
+    command.pipe(res, { end: true });
 });
 
 module.exports = router;
