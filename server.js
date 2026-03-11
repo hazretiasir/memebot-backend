@@ -9,6 +9,30 @@ const downloaderRoutes = require('./routes/downloader');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const path = require('path');
+const fs = require('fs');
+
+// ─── Local Logging Bridge ─────────────────────────────────────────────────────
+// All console.log/error will also go to backend/app.log for easy viewing
+const logFile = path.join(__dirname, 'app.log');
+const logStream = fs.createWriteStream(logFile, { flags: 'a' });
+
+const originalLog = console.log;
+const originalError = console.error;
+
+console.log = function (...args) {
+    const timestamp = new Date().toLocaleString('tr-TR');
+    logStream.write(`[${timestamp}] [LOG] ${args.join(' ')}\n`);
+    originalLog.apply(console, args);
+};
+
+console.error = function (...args) {
+    const timestamp = new Date().toLocaleString('tr-TR');
+    logStream.write(`[${timestamp}] [ERR] ${args.join(' ')}\n`);
+    originalError.apply(console, args);
+};
+
+console.log('--- Server Logging Started ---');
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(cors());
