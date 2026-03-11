@@ -44,11 +44,11 @@ router.post('/download', async (req, res) => {
             });
         }
 
-        // Determine real extension from the direct URL to prevent codec mismatch
-        let ext = isAudio ? 'm4a' : 'mp4';
+        // Determine real extension from metadata or direct URL to prevent codec mismatch
+        let ext = info.ext || (isAudio ? 'm4a' : 'mp4');
         if (downloadUrl.includes('.mp3')) ext = 'mp3';
         else if (downloadUrl.includes('.webm')) ext = 'webm';
-        else if (downloadUrl.includes('.m4a')) ext = 'm4a';
+        else if (downloadUrl.includes('.m4a') && ext !== 'mp3') ext = 'm4a';
         else if (downloadUrl.includes('.aac')) ext = 'aac';
 
         const safeTitle = (info.title ?? 'video')
