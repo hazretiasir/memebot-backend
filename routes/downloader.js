@@ -101,7 +101,7 @@ router.get('/proxy-audio', async (req, res) => {
             output: `${tempBase}.%(ext)s`,
             extractAudio: true,
             audioFormat: 'mp3',
-            audioBitrate: '128',
+            audioQuality: '128K',
             noWarnings: true,
             noCheckCertificates: true,
             // Point yt-dlp at the bundled ffmpeg-static binary
