@@ -19,11 +19,9 @@ router.post('/download', async (req, res) => {
             dumpSingleJson: true,
             noWarnings: true,
             noCheckCertificates: true,
-            // Prefer a single-stream progressive MP4 so the client can play it
-            // without needing FFmpeg for merging. Falls back to best available.
-            format: isAudio
-                ? 'bestaudio[ext=mp3]/bestaudio[ext=m4a]/bestaudio'
-                : 'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
+            // Just get the best available. Forcing ext=mp3 on fetch often fails
+            // because no platform natively hosts raw mp3.
+            format: isAudio ? 'bestaudio/best' : 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         });
 
         // Resolve the best direct URL from the metadata
@@ -33,9 +31,10 @@ router.post('/download', async (req, res) => {
             // Pick the highest-quality format that has a direct URL
             const withUrls = info.formats.filter((f) => !!f.url);
             const preferred = withUrls
-                .filter((f) => isAudio ? f.vcodec === 'none' : f.acodec !== 'none')
+                .filter((f) => isAudio ? (f.vcodec === 'none' || f.acodec !== 'none') : (f.vcodec !== 'none' && f.acodec !== 'none'))
                 .pop();
             downloadUrl = preferred?.url ?? withUrls.pop()?.url;
+            if (isAudio && preferred && preferred.ext) info.ext = preferred.ext;
         }
 
         if (!downloadUrl) {
@@ -58,10 +57,9 @@ router.post('/download', async (req, res) => {
         let finalFilename = `${safeTitle}.${isAudio ? 'mp3' : ext}`;
 
         if (isAudio) {
-            // Tell the flutter app to hit a new Proxy endpoint on our backend which handles the entire transcode securely.
-            // Use the current host to build the proxy URL
-            const host = req.get('host') || 'localhost:3000';
-            const protocol = req.protocol || 'https';
+            // Render usually has 'x-forwarded-proto' header for https
+            const protocol = req.headers['x-forwarded-proto'] || 'https';
+            const host = req.get('host');
             finalDownloadUrl = `${protocol}://${host}/api/downloader/proxy-audio?url=${encodeURIComponent(downloadUrl)}`;
         }
 
@@ -70,8 +68,9 @@ router.post('/download', async (req, res) => {
     } catch (err) {
         console.error('[Downloader] ❌ Error:', err.message);
         return res.status(500).json({
-            error: 'Video URL çözümlenemedi',
+            error: 'Video bilgileri alınamadı (API Hatası)',
             details: err.message,
+            tip: 'Linkin doğruluğunu kontrol edin veya sunucuyu yeniden başlatın.'
         });
     }
 });
