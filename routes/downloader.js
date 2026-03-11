@@ -22,7 +22,7 @@ router.post('/download', async (req, res) => {
             // Prefer a single-stream progressive MP4 so the client can play it
             // without needing FFmpeg for merging. Falls back to best available.
             format: isAudio
-                ? 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio'
+                ? 'bestaudio[ext=mp3]/bestaudio[ext=m4a]/bestaudio'
                 : 'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
         });
 
@@ -45,7 +45,7 @@ router.post('/download', async (req, res) => {
         }
 
         // Build a clean filename
-        const ext = isAudio ? 'm4a' : 'mp4';
+        const ext = isAudio ? 'mp3' : 'mp4';
         const safeTitle = (info.title ?? 'video')
             .replace(/[^\w\-_\u00C0-\u024F]/g, '_')
             .replace(/_+/g, '_')
