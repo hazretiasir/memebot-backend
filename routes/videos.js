@@ -55,6 +55,7 @@ async function getThumbnailSignedUrl(thumbnailKey) {
 
 // Helper: map a Video document to response JSON (with pre-signed thumbnail)
 async function videoToJson(v) {
+    const signedThumb = await getThumbnailSignedUrl(v.thumbnailKey);
     return {
         _id: v._id,
         title: v.title,
