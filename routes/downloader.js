@@ -44,6 +44,14 @@ router.post('/download', async (req, res) => {
             });
         }
 
+        // Extract extension and safe title
+        let ext = info.ext || (isAudio ? 'm4a' : 'mp4');
+        const safeTitle = (info.title ?? 'video')
+            .replace(/[^\w\-_\u00C0-\u024F]/g, '_')
+            .replace(/_+/g, '_')
+            .substring(0, 60)
+            .trim();
+
         // Instead of giving Android a raw M3U8/AAC Twitter stream (which crashes Android's file player),
         // We will tell flutter to download from our server, and our server will proxy/transcode it safely.
 
