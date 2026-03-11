@@ -55,13 +55,13 @@ async function getThumbnailSignedUrl(thumbnailKey) {
 
 // Helper: map a Video document to response JSON (with pre-signed thumbnail)
 async function videoToJson(v) {
-    const signedThumb = await getThumbnailSignedUrl(v.thumbnailKey);
     return {
         _id: v._id,
         title: v.title,
         tags: v.tags,
         s3Url: v.s3Url,
         thumbnailUrl: signedThumb,
+        tweetUrl: v.tweetUrl,
         likes: v.likes,
         dislikes: v.dislikes,
         relevanceScore: v.relevanceScore,
@@ -77,7 +77,7 @@ router.post('/upload', upload.single('video'), async (req, res) => {
         return res.status(400).json({ error: 'No video file provided' });
     }
 
-    const { title, tags, uploadedBy } = req.body;
+    const { title, tags, uploadedBy, tweetUrl } = req.body;
     if (!title) {
         return res.status(400).json({ error: 'Title is required' });
     }
@@ -113,6 +113,7 @@ router.post('/upload', upload.single('video'), async (req, res) => {
             s3Key: key,
             s3Url,
             uploadedBy: uploadedBy || 'anonymous',
+            tweetUrl: tweetUrl || null,
         });
 
         await video.save();
@@ -173,6 +174,7 @@ router.post('/upload', upload.single('video'), async (req, res) => {
                 title: video.title,
                 tags: video.tags,
                 s3Url: video.s3Url,
+                tweetUrl: video.tweetUrl,
                 likes: video.likes,
                 dislikes: video.dislikes,
                 relevanceScore: video.relevanceScore,
@@ -671,6 +673,7 @@ router.get('/', async (req, res) => {
                 dislikes: v.dislikes,
                 relevanceScore: v.relevanceScore,
                 downloadCount: v.downloadCount,
+                tweetUrl: v.tweetUrl,
                 createdAt: v.createdAt,
             })),
         });

@@ -126,15 +126,20 @@ async function downloadAndUpload(targetAccount, tweetUrls, baseProgress) {
     }
 
     let existingTitles = new Set();
+    let existingUrls = new Set();
     try {
-        console.log(`🔍 Tüm veritabanı başlıkları taranıyor (Çifte yüklemeyi önlemek için)...`);
-        const res = await axios.get(`${API_BASE_URL}/api/videos?limit=50000`);
-        res.data.videos.forEach(v => {
-            if (v.title && v.title.length > 3) existingTitles.add(v.title.toLowerCase());
-        });
-        console.log(`✅ ${existingTitles.size} özgün video başlığı API'den alındı.`);
+        console.log(`🔍 Tüm veritabanı verileri taranıyor (Çifte yüklemeyi önlemek için)...`);
+        // We fetch the most recent 1000 videos to keep it efficient but safe
+        const res = await axios.get(`${API_BASE_URL}/api/videos?limit=1000&sort=recent`);
+        if (res.data && res.data.videos) {
+            res.data.videos.forEach(v => {
+                if (v.title && v.title.length > 3) existingTitles.add(v.title.toLowerCase().trim());
+                if (v.tweetUrl) existingUrls.add(v.tweetUrl);
+            });
+        }
+        console.log(`✅ ${existingTitles.size} başlık ve ${existingUrls.size} URL API'den alındı.`);
     } catch (err) {
-        console.log(`⚠️ API'den başlıklar alınamadı, kopya kontrolü sadece URL bazlı çalışacak.`);
+        console.log(`⚠️ API'den veriler tam alınamadı, yerel kontrol devrede.`);
     }
 
     // Process only up to MAX_VIDEOS_PER_ACCOUNT
@@ -147,8 +152,8 @@ async function downloadAndUpload(targetAccount, tweetUrls, baseProgress) {
 
         console.log(`\n▶ [${i + 1}/${urlsToProcess.length}] İşleniyor: ${url}`);
 
-        if (uploadedUrls.has(url)) {
-            console.log(`⏭️ Zaten sistemde yt-dlp ile işlenmiş, atlanıyor...`);
+        if (uploadedUrls.has(url) || existingUrls.has(url)) {
+            console.log(`⏭️ Zaten sistemde (URL bazlı), atlanıyor...`);
             continue;
         }
 
@@ -203,6 +208,7 @@ async function downloadAndUpload(targetAccount, tweetUrls, baseProgress) {
             formData.append('title', description);
             formData.append('tags', `meme,X,arşiv,${targetAccount}`);
             formData.append('uploadedBy', `automation_bot_${targetAccount}`);
+            formData.append('tweetUrl', url);
 
             const response = await axios.post(UPLOAD_URL, formData, {
                 headers: { ...formData.getHeaders() },

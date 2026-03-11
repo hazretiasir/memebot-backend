@@ -88,6 +88,12 @@ const videoSchema = new mongoose.Schema({
         type: String,
         default: '',
     },
+    // The original tweet/link URL to prevent duplicates across environments
+    tweetUrl: {
+        type: String,
+        default: null,
+        index: true,
+    },
 });
 
 // Full-text search index: now includes transcript and searchText
