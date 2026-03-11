@@ -44,8 +44,13 @@ router.post('/download', async (req, res) => {
             });
         }
 
-        // Build a clean filename
-        const ext = isAudio ? 'mp3' : 'mp4';
+        // Determine real extension from the direct URL to prevent codec mismatch
+        let ext = isAudio ? 'm4a' : 'mp4';
+        if (downloadUrl.includes('.mp3')) ext = 'mp3';
+        else if (downloadUrl.includes('.webm')) ext = 'webm';
+        else if (downloadUrl.includes('.m4a')) ext = 'm4a';
+        else if (downloadUrl.includes('.aac')) ext = 'aac';
+
         const safeTitle = (info.title ?? 'video')
             .replace(/[^\w\-_\u00C0-\u024F]/g, '_')
             .replace(/_+/g, '_')
