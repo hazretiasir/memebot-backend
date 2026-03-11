@@ -267,7 +267,11 @@ router.get('/check', async (req, res) => {
     try {
         const query = { $or: [] };
         if (url) query.$or.push({ tweetUrl: url });
-        if (title) query.$or.push({ title: { $regex: `^${title.trim()}$`, $options: 'i' } });
+        if (title) {
+            // Escape special regex characters in title to prevent crashes
+            const escapedTitle = title.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            query.$or.push({ title: { $regex: `^${escapedTitle}$`, $options: 'i' } });
+        }
 
         if (query.$or.length === 0) return res.json({ exists: false });
 
