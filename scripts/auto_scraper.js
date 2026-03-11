@@ -10,7 +10,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const TARGET_ACCOUNTS = ['yalcdb', 'videolarsivi', 'BelalArsiv'];
 const UPLOAD_URL = 'http://localhost:3000/api/videos/upload';
 const DELAY_BETWEEN_UPLOADS = 5000;
-const MAX_VIDEOS_PER_ACCOUNT = 10;
+const MAX_VIDEOS_PER_ACCOUNT = 50;
 
 // Hardcoded X_AUTH_TOKEN from previous working version
 const X_AUTH_TOKEN = 'aa296debbaae4e6f19c6b2a177616a2e4875d587';
@@ -290,4 +290,8 @@ async function runAutomation() {
     updateProgress('completed', 'Tüm görevler başarıyla tamamlandı!', 100);
 }
 
-runAutomation();
+if (require.main === module) {
+    runAutomation();
+} else {
+    module.exports = { runAutomation };
+}
