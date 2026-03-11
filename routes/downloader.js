@@ -95,7 +95,12 @@ router.get('/proxy-audio', (req, res) => {
 
     console.log(`[Downloader Proxy] Transcoding Audio to TEMP MP3 -> ${url.substring(0, 50)}...`);
 
-    ffmpeg(url)
+    ffmpeg()
+        .input(url)
+        .inputOptions([
+            '-headers',
+            `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\nReferer: https://twitter.com/\r\n`
+        ])
         .noVideo()
         .audioCodec('libmp3lame')
         .audioBitrate('128k')
