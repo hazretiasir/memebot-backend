@@ -241,7 +241,7 @@ async function downloadAndUpload(targetAccount, tweetUrls, baseProgress) {
 
 async function runAutomation() {
     console.log("=================================================");
-    console.log("🚀 Otomatik 10'lu Twitter/X Avcısı Başlatıldı (NEW_LOGIC_V2) 🚀");
+    console.log("🚀 Otomatik 10'lu Twitter/X Avcısı Başlatıldı (URGENT_PUSH_999) 🚀");
     console.log(`Hedefler: [${TARGET_ACCOUNTS.join(', ')}]`);
     console.log("=================================================");
 
