@@ -25,6 +25,9 @@ TIKTOK_CLIENT_KEY     = os.environ.get("TIKTOK_CLIENT_KEY", "")
 TIKTOK_CLIENT_SECRET  = os.environ.get("TIKTOK_CLIENT_SECRET", "")
 
 errors = []
+s3_size_info = ""   # health check özetinde gösterilmek üzere
+
+S3_WARN_GB = 4.0    # Bu eşiğin üzerinde uyarı ver
 
 
 def check_mongodb():
@@ -54,6 +57,7 @@ def check_mongodb():
 
 
 def check_s3():
+    global s3_size_info
     print("🔍 S3 kontrol ediliyor...")
     try:
         s3 = boto3.client(
@@ -62,9 +66,24 @@ def check_s3():
             aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
             region_name=AWS_REGION,
         )
-        resp = s3.list_objects_v2(Bucket=S3_BUCKET, MaxKeys=1)
-        count = resp.get("KeyCount", 0)
-        print(f"   ✅ S3 erişimi OK — bucket: {S3_BUCKET} ({count} obje örnek)")
+
+        # Tüm objeleri sayfalayarak topla
+        total_size = 0
+        total_count = 0
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=S3_BUCKET):
+            for obj in page.get("Contents", []):
+                total_size += obj["Size"]
+                total_count += 1
+
+        size_gb = total_size / (1024 ** 3)
+        size_str = f"{size_gb:.2f} GB" if size_gb >= 1 else f"{total_size / (1024 ** 2):.0f} MB"
+        s3_size_info = f"{total_count} obje, {size_str}"
+
+        print(f"   ✅ S3 erişimi OK — {s3_size_info}")
+
+        if size_gb >= S3_WARN_GB:
+            errors.append(f"⚠️  S3 bucket büyüklüğü {size_str} — depolama limitine yaklaşıyor!")
     except ClientError as e:
         errors.append(f"❌ S3 erişim hatası: {e}")
         print(f"   ❌ {e}")
@@ -149,7 +168,8 @@ def main():
         sys.exit(1)
     else:
         print("✅ Tüm kontroller başarılı — sistem sağlıklı.")
-        tg("✅ <b>MemeBot Health Check OK</b> — sistem sağlıklı.")
+        size_line = f"\n☁️ S3: {s3_size_info}" if s3_size_info else ""
+        tg(f"✅ <b>MemeBot Health Check OK</b> — sistem sağlıklı.{size_line}")
 
 
 if __name__ == "__main__":
