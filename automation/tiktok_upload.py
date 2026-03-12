@@ -107,8 +107,8 @@ def _do_upload(page, video_path: str, caption: str) -> bool:
     time.sleep(6)
 
     # Hata ayıklama: sayfada ne var?
-    page_text = page.evaluate("() => document.body ? document.body.innerText.slice(0, 300) : 'no body'")
-    print(f"   Sayfa içeriği (ilk 300 kar): {page_text[:300]}")
+    html_snippet = page.evaluate("() => document.documentElement.outerHTML.slice(0, 2000)")
+    print(f"   HTML (ilk 2000):\n{html_snippet}")
     file_input_count = page.evaluate("() => document.querySelectorAll('input[type=\"file\"]').length")
     print(f"   File input sayısı (JS): {file_input_count}")
 
