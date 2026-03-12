@@ -1,0 +1,33 @@
+name: MemeBot Daily Search Report
+
+on:
+  schedule:
+    # Her sabah 06:05 UTC = 09:05 Türkiye (health check'ten 5 dk sonra)
+    - cron: '5 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  search-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r automation/requirements.txt
+
+      - name: Send daily search report
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python automation/daily_search_report.py
