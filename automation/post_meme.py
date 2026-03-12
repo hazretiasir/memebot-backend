@@ -67,6 +67,7 @@ def get_instagram_token(db) -> str:
                 upsert=True,
             )
             print(f"✅ Token yenilendi, {data.get('expires_in', '?')} sn geçerli.")
+            tg("🔄 <b>Instagram token yenilendi.</b>")
         else:
             print(f"⚠️  Token yenilenemedi: {data} — mevcut token kullanılıyor.")
     else:
@@ -217,7 +218,9 @@ def _post_instagram_story(base: str, token: str, thumbnail_url: str):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    print("🤖 MemeBot Auto-Poster starting —", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"))
+    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    print("🤖 MemeBot Auto-Poster starting —", now_str)
+    tg(f"🤖 <b>MemeBot paylaşım başlıyor...</b>\n{now_str}")
 
     # MongoDB
     client = MongoClient(MONGODB_URI)
@@ -299,4 +302,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        tg(f"💥 <b>MemeBot CRASH!</b>\n\n<code>{e}</code>")
+        raise

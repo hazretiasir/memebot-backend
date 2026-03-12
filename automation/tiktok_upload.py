@@ -10,6 +10,7 @@ import json
 import math
 import time
 import requests
+from telegram_notify import send as tg
 
 CLIENT_KEY     = os.environ.get("TIKTOK_CLIENT_KEY", "")
 CLIENT_SECRET  = os.environ.get("TIKTOK_CLIENT_SECRET", "")
@@ -32,7 +33,8 @@ def _get_token() -> str:
     })
     data = resp.json()
     if "access_token" in data:
-        print("🔄 Token yenilendi.")
+        print("🔄 TikTok token yenilendi.")
+        tg("🔄 <b>TikTok token yenilendi.</b>")
         return data["access_token"]
 
     print(f"⚠️  Token yenilenemedi: {data} — mevcut token deneniyor.")
