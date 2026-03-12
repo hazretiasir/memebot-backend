@@ -45,5 +45,14 @@ jobs:
           INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
           INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
           TIKTOK_SESSION: ${{ secrets.TIKTOK_SESSION }}
+          TIKTOK_PROXY: ${{ secrets.TIKTOK_PROXY }}
           TIKTOK_ONLY: ${{ github.event.inputs.tiktok_only }}
         run: python automation/post_meme.py
+
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tiktok-screenshots
+          path: /tmp/tiktok_*.png
+          if-no-files-found: ignore

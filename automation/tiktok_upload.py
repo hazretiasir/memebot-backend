@@ -3,16 +3,19 @@
 TikTok Video Uploader — Playwright stealth + storage_state tabanlı.
 GitHub Actions'da post_meme.py tarafından çağrılır.
 TIKTOK_SESSION env var'ından tam oturum durumunu okur.
+TIKTOK_PROXY env var'ı ayarlanmışsa residential proxy üzerinden bağlanır.
 """
 
 import os
 import json
 import time
+import base64
 import tempfile
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 from playwright_stealth import stealth_sync
 
 TIKTOK_SESSION = os.environ.get("TIKTOK_SESSION", "")
+TIKTOK_PROXY   = os.environ.get("TIKTOK_PROXY", "")  # http://user:pass@host:port
 
 
 def upload_to_tiktok(video_path: str, caption: str) -> bool:
@@ -26,7 +29,11 @@ def upload_to_tiktok(video_path: str, caption: str) -> bool:
         print("❌ TIKTOK_SESSION geçerli JSON değil.")
         return False
 
-    # storage_state'i geçici dosyaya yaz (Playwright API bunu dosyadan okuyor)
+    if TIKTOK_PROXY:
+        print(f"🌐 Proxy kullanılıyor: {TIKTOK_PROXY.split('@')[-1]}")  # şifreyi gizle
+    else:
+        print("⚠️  TIKTOK_PROXY ayarlanmamış — datacenter IP ile deneniyor.")
+
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".json", delete=False, encoding="utf-8"
     ) as tf:
@@ -42,9 +49,14 @@ def upload_to_tiktok(video_path: str, caption: str) -> bool:
 
 
 def _run_upload(session_file: str, video_path: str, caption: str) -> bool:
+    proxy_config = None
+    if TIKTOK_PROXY:
+        proxy_config = {"server": TIKTOK_PROXY}
+
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=True,
+            proxy=proxy_config,
             args=[
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
@@ -54,6 +66,7 @@ def _run_upload(session_file: str, video_path: str, caption: str) -> bool:
         )
         context = browser.new_context(
             storage_state=session_file,
+            proxy=proxy_config,
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -71,6 +84,7 @@ def _run_upload(session_file: str, video_path: str, caption: str) -> bool:
             result = _do_upload(page, video_path, caption)
         except Exception as e:
             print(f"❌ TikTok upload hatası: {e}")
+            _save_screenshot(page, "tiktok_error")
             result = False
         finally:
             browser.close()
@@ -81,7 +95,6 @@ def _run_upload(session_file: str, video_path: str, caption: str) -> bool:
 def _do_upload(page, video_path: str, caption: str) -> bool:
     print("🎵 TikTok upload sayfasına gidiliyor...")
 
-    # Creator Center URL'ini dene, fallback olarak eski URL
     upload_urls = [
         "https://www.tiktok.com/creator-center/upload",
         "https://www.tiktok.com/upload",
@@ -106,15 +119,19 @@ def _do_upload(page, video_path: str, caption: str) -> bool:
         pass
     time.sleep(6)
 
-    # Hata ayıklama: sayfada ne var?
-    html_snippet = page.evaluate("() => document.documentElement.outerHTML.slice(0, 2000)")
-    print(f"   HTML (ilk 2000):\n{html_snippet}")
+    # Pumbaa / bot engeli tespiti
+    body_text = page.evaluate("() => document.body ? document.body.innerText.trim() : ''")
     file_input_count = page.evaluate("() => document.querySelectorAll('input[type=\"file\"]').length")
-    print(f"   File input sayısı (JS): {file_input_count}")
+    print(f"   Body metin uzunluğu: {len(body_text)} kar | File input sayısı: {file_input_count}")
+
+    if len(body_text) < 50 and file_input_count == 0:
+        print("❌ Pumbaa bot engeli tespit edildi — sayfa render edilmedi.")
+        print("   Çözüm: TIKTOK_PROXY secret'ına residential proxy ekle.")
+        _save_screenshot(page, "tiktok_pumbaa_block")
+        return False
 
     # Upload alanını bul — hidden dahil tüm input[type=file]
     print("🔍 Upload alanı aranıyor...")
-    print(f"   Frame sayısı: {len(page.frames)}")
     file_input = None
 
     # 1) Ana sayfada hidden dahil ara
@@ -122,7 +139,7 @@ def _do_upload(page, video_path: str, caption: str) -> bool:
         fi = page.locator("input[type='file']").first
         fi.wait_for(state="attached", timeout=10000)
         file_input = fi
-        print("  Ana sayfada (attached) bulundu.")
+        print("  Ana sayfada bulundu.")
     except PlaywrightTimeout:
         pass
 
@@ -140,29 +157,38 @@ def _do_upload(page, video_path: str, caption: str) -> bool:
 
     if file_input is None:
         print("❌ Dosya yükleme alanı bulunamadı.")
-        print(f"   Mevcut URL: {page.url}")
-        for i, frame in enumerate(page.frames):
-            print(f"   Frame[{i}]: {frame.url[:80]}")
+        _save_screenshot(page, "tiktok_no_input")
         return False
 
     print(f"📤 Video seçiliyor: {video_path}")
     file_input.set_input_files(video_path)
 
-    # Yükleme tamamlanana kadar bekle
     print("⏳ Video yükleniyor ve işleniyor...")
     _wait_for_upload(page)
 
-    # Caption yaz
     _write_caption(page, caption)
 
-    # Post et
     return _click_post(page)
+
+
+def _save_screenshot(page, name: str):
+    """Hata anında ekran görüntüsü alır, base64 olarak loglar."""
+    try:
+        path = f"/tmp/{name}.png"
+        page.screenshot(path=path, full_page=True)
+        with open(path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+        # GitHub Actions artifact olarak kaydet
+        with open(f"/tmp/{name}.b64", "w") as f:
+            f.write(b64)
+        print(f"📸 Screenshot kaydedildi: {path} ({len(b64)//1024} KB base64)")
+    except Exception as e:
+        print(f"⚠️  Screenshot alınamadı: {e}")
 
 
 def _wait_for_upload(page):
     """Video yüklenip işlenene kadar bekler (max 3 dakika)."""
     try:
-        # Progress bar veya "Uploading" metni kaybolana kadar bekle
         page.wait_for_function(
             """() => {
                 const text = document.body.innerText;
@@ -191,7 +217,6 @@ def _write_caption(page, caption: str):
             time.sleep(0.5)
             page.keyboard.press("Control+a")
             page.keyboard.press("Delete")
-            # İnsan gibi yazmak için hafif delay
             box.type(caption[:2200], delay=20)
             time.sleep(1)
             print("✅ Caption yazıldı.")
@@ -223,16 +248,14 @@ def _click_post(page) -> bool:
         print("❌ Post butonu bulunamadı.")
         return False
 
-    # Başarı doğrulaması — profil sayfasına yönlendirilmeli
     try:
         page.wait_for_url("**/profile**", timeout=30000)
     except PlaywrightTimeout:
         pass
 
-    # URL hâlâ upload'da değilse başarılı say
     if "upload" not in page.url:
         print("✅ TikTok'a başarıyla yüklendi!")
         return True
 
     print("⚠️  Upload sonucu doğrulanamadı.")
-    return True  # Yine de True dön — başarılı olmuş olabilir
+    return True

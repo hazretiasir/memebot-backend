@@ -49,19 +49,37 @@ def main():
         state = context.storage_state()
         browser.close()
 
+    # Tam oturumu kaydet (yedek)
     output_path = "tiktok_session.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
+
+    # GitHub Secret için origins/localStorage kaldırılmış küçük versiyon
+    small = {"cookies": state.get("cookies", []), "origins": []}
+    small_json = json.dumps(small, ensure_ascii=False, separators=(",", ":"))
+    small_size = len(small_json.encode("utf-8"))
+    GITHUB_SECRET_LIMIT = 65536  # 64 KB
+
+    small_path = "tiktok_session_small.json"
+    with open(small_path, "w", encoding="utf-8") as f:
+        f.write(small_json)
 
     cookie_count = len(state.get("cookies", []))
     origin_count = len(state.get("origins", []))
     print(f"\n✅ Oturum kaydedildi → {output_path}")
     print(f"   {cookie_count} cookie, {origin_count} origin kaydedildi.")
+    print(f"\n✅ GitHub Secret versiyonu → {small_path}")
+    print(f"   Boyut: {small_size} bytes ({small_size // 1024} KB) — limit: 64 KB")
+
+    if small_size > GITHUB_SECRET_LIMIT:
+        print(f"❌ UYARI: {small_path} hâlâ {small_size} bytes — GitHub Secret limitini ({GITHUB_SECRET_LIMIT}) aşıyor!")
+    else:
+        print(f"✅ Boyut limiti içinde.")
+
     print("\n📋 Sonraki adım:")
-    print("   GitHub repo → Settings → Secrets → Actions → New secret")
-    print("   Name : TIKTOK_SESSION")
-    print(f"   Value: tiktok_session.json dosyasının tüm içeriğini yapıştır\n")
-    print("⚠️  tiktok_session.json dosyasını commit'leme! .gitignore'a ekle.\n")
+    print("   GitHub repo → Settings → Secrets → Actions → TIKTOK_SESSION")
+    print(f"   Value: {small_path} dosyasının tüm içeriğini yapıştır\n")
+    print("⚠️  tiktok_session.json ve tiktok_session_small.json dosyalarını commit'leme!\n")
 
 
 if __name__ == "__main__":
