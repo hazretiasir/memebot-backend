@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const { send: tg } = require('./utils/telegram_notify');
 
 const videoRoutes = require('./routes/videos');
 const searchRoutes = require('./routes/searches');
@@ -57,12 +58,26 @@ mongoose
         console.log('✅ MongoDB connected');
         app.listen(PORT, () => {
             console.log(`🚀 MemeBot backend running on port ${PORT}`);
+            tg('🚀 <b>MemeBot backend başladı</b> — MongoDB bağlı, sunucu hazır.');
         });
     })
     .catch((err) => {
         console.error('❌ MongoDB connection error:', err.message);
+        tg(`❌ <b>MemeBot backend BAŞARISIZ</b>\n\nMongoDB bağlantı hatası:\n<code>${err.message}</code>`);
         process.exit(1);
     });
+
+process.on('uncaughtException', (err) => {
+    console.error('💥 uncaughtException:', err.message);
+    tg(`💥 <b>MemeBot backend CRASH (uncaughtException)</b>\n\n<code>${err.message}</code>`);
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+    const msg = reason instanceof Error ? reason.message : String(reason);
+    console.error('💥 unhandledRejection:', msg);
+    tg(`💥 <b>MemeBot backend CRASH (unhandledRejection)</b>\n\n<code>${msg}</code>`);
+});
 
 // ─── Global error handler ─────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
