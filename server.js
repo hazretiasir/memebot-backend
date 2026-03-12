@@ -4,9 +4,10 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const { send: tg } = require('./utils/telegram_notify');
 
-const videoRoutes = require('./routes/videos');
-const searchRoutes = require('./routes/searches');
+const videoRoutes    = require('./routes/videos');
+const searchRoutes   = require('./routes/searches');
 const downloaderRoutes = require('./routes/downloader');
+const telegramRoutes = require('./routes/telegram');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -45,6 +46,7 @@ app.use(express.static('public'));
 app.use('/api/videos', videoRoutes);
 app.use('/api/searches', searchRoutes);
 app.use('/api/downloader', downloaderRoutes);
+app.use('/telegram', telegramRoutes);
 
 
 app.get('/health', (req, res) => {
