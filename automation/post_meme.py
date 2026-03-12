@@ -32,6 +32,56 @@ INSTAGRAM_USER_ID    = os.environ.get("INSTAGRAM_USER_ID", "")
 INSTAGRAM_ACCESS_TOKEN = os.environ.get("INSTAGRAM_ACCESS_TOKEN", "")
 TIKTOK_ONLY          = os.environ.get("TIKTOK_ONLY", "").lower() == "true"
 
+# ── Instagram Token Yönetimi ──────────────────────────────────────────────────
+
+def get_instagram_token(db) -> str:
+    """
+    Token'ı MongoDB'den okur. 45 günden eskiyse yeniler ve kaydeder.
+    MongoDB'de kayıt yoksa env var'daki token'ı kullanır ve kaydeder.
+    """
+    cfg = db["config"]
+    doc = cfg.find_one({"key": "instagram_access_token"})
+
+    token = doc["value"] if doc else INSTAGRAM_ACCESS_TOKEN
+    if not token:
+        return ""
+
+    # 45 günden eskiyse yenile
+    needs_refresh = True
+    if doc and doc.get("refreshed_at"):
+        from datetime import timedelta
+        age = datetime.now(timezone.utc) - doc["refreshed_at"].replace(tzinfo=timezone.utc)
+        needs_refresh = age.days >= 45
+
+    if needs_refresh:
+        print("🔄 Instagram token yenileniyor...")
+        resp = requests.get(
+            "https://graph.instagram.com/refresh_access_token",
+            params={"grant_type": "ig_refresh_token", "access_token": token},
+            timeout=15,
+        )
+        data = resp.json()
+        if "access_token" in data:
+            token = data["access_token"]
+            cfg.update_one(
+                {"key": "instagram_access_token"},
+                {"$set": {"value": token, "refreshed_at": datetime.now(timezone.utc)}},
+                upsert=True,
+            )
+            print(f"✅ Token yenilendi, {data.get('expires_in', '?')} sn geçerli.")
+        else:
+            print(f"⚠️  Token yenilenemedi: {data} — mevcut token kullanılıyor.")
+    else:
+        # İlk kez MongoDB'ye kaydet
+        if not doc:
+            cfg.update_one(
+                {"key": "instagram_access_token"},
+                {"$set": {"value": token, "refreshed_at": datetime.now(timezone.utc)}},
+                upsert=True,
+            )
+
+    return token
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def get_unposted_video(col):
@@ -71,8 +121,8 @@ def build_caption(video):
 
 # ── Instagram ─────────────────────────────────────────────────────────────────
 
-def post_to_instagram(video_url: str, caption: str, thumbnail_url: str = None) -> bool:
-    if not INSTAGRAM_USER_ID or not INSTAGRAM_ACCESS_TOKEN:
+def post_to_instagram(video_url: str, caption: str, token: str, thumbnail_url: str = None) -> bool:
+    if not INSTAGRAM_USER_ID or not token:
         print("⚠️  Instagram credentials not configured — skipping.")
         return False
 
@@ -85,7 +135,7 @@ def post_to_instagram(video_url: str, caption: str, thumbnail_url: str = None) -
         "video_url":     video_url,
         "caption":       caption,
         "share_to_feed": "true",
-        "access_token":  INSTAGRAM_ACCESS_TOKEN,
+        "access_token":  token,
     }
     if thumbnail_url:
         params["cover_url"] = thumbnail_url
@@ -106,7 +156,7 @@ def post_to_instagram(video_url: str, caption: str, thumbnail_url: str = None) -
         time.sleep(15)
         s = requests.get(
             f"https://graph.facebook.com/v18.0/{container_id}",
-            params={"fields": "status_code", "access_token": INSTAGRAM_ACCESS_TOKEN},
+            params={"fields": "status_code", "access_token": token},
             timeout=15,
         ).json().get("status_code", "UNKNOWN")
         print(f"   [{attempt+1}/20] status: {s}")
@@ -120,7 +170,7 @@ def post_to_instagram(video_url: str, caption: str, thumbnail_url: str = None) -
     print("🚀 Publishing Reel...")
     pub = requests.post(f"{base}/media_publish", data={
         "creation_id": container_id,
-        "access_token": INSTAGRAM_ACCESS_TOKEN,
+        "access_token": token,
     }, timeout=30)
 
     if pub.status_code != 200:
@@ -132,18 +182,18 @@ def post_to_instagram(video_url: str, caption: str, thumbnail_url: str = None) -
 
     # 4. Story — thumbnail varsa image story, yoksa atla
     if thumbnail_url:
-        _post_instagram_story(base, thumbnail_url)
+        _post_instagram_story(base, token, thumbnail_url)
 
     return True
 
 
-def _post_instagram_story(base: str, thumbnail_url: str):
+def _post_instagram_story(base: str, token: str, thumbnail_url: str):
     """Thumbnail ile Instagram Story paylaşır."""
     print("📖 Instagram Story paylaşılıyor...")
     r = requests.post(f"{base}/media", data={
         "media_type":   "STORIES",
         "image_url":    thumbnail_url,
-        "access_token": INSTAGRAM_ACCESS_TOKEN,
+        "access_token": token,
     }, timeout=30)
 
     if r.status_code != 200:
@@ -155,7 +205,7 @@ def _post_instagram_story(base: str, thumbnail_url: str):
 
     pub = requests.post(f"{base}/media_publish", data={
         "creation_id":  story_id,
-        "access_token": INSTAGRAM_ACCESS_TOKEN,
+        "access_token": token,
     }, timeout=30)
 
     if pub.status_code == 200:
@@ -173,7 +223,11 @@ def main():
 
     # MongoDB
     client = MongoClient(MONGODB_URI)
-    col    = client["memebot"]["videos"]
+    db     = client["memebot"]
+    col    = db["videos"]
+
+    # Instagram token — MongoDB'den al, gerekirse yenile
+    ig_token = get_instagram_token(db)
 
     # S3
     s3 = boto3.client(
@@ -202,7 +256,7 @@ def main():
         url           = presigned_url(s3, s3_key, expires=7200)
         thumbnail_key = video.get("thumbnailKey")
         thumb_url     = presigned_url(s3, thumbnail_key, expires=7200) if thumbnail_key else None
-        if post_to_instagram(url, caption, thumbnail_url=thumb_url):
+        if post_to_instagram(url, caption, token=ig_token, thumbnail_url=thumb_url):
             posted_platforms.append("instagram")
 
     # ── TikTok (Playwright cookie tabanlı) ────────────────────────────────────
