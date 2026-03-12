@@ -58,7 +58,6 @@ mongoose
         console.log('✅ MongoDB connected');
         app.listen(PORT, () => {
             console.log(`🚀 MemeBot backend running on port ${PORT}`);
-            tg('🚀 <b>MemeBot backend başladı</b> — MongoDB bağlı, sunucu hazır.');
         });
     })
     .catch((err) => {
