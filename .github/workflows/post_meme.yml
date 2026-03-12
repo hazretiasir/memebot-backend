@@ -1,0 +1,38 @@
+name: MemeBot Social Media Auto-Poster
+
+on:
+  schedule:
+    # UTC → Turkey (UTC+3): 09:00→12:00, 15:00→18:00, 19:30→22:30
+    - cron: '0 9 * * *'
+    - cron: '0 15 * * *'
+    - cron: '30 19 * * *'
+  workflow_dispatch: # Manual trigger for testing
+
+jobs:
+  post-meme:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r automation/requirements.txt
+
+      - name: Run auto-poster
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          TIKTOK_ACCESS_TOKEN: ${{ secrets.TIKTOK_ACCESS_TOKEN }}
+        run: python automation/post_meme.py
