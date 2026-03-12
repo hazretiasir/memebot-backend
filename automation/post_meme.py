@@ -18,6 +18,7 @@ import boto3
 import requests
 from pymongo import MongoClient
 from datetime import datetime, timezone
+from tiktok_upload import upload_to_tiktok
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -29,7 +30,6 @@ S3_BUCKET            = os.environ["S3_BUCKET_NAME"]
 
 INSTAGRAM_USER_ID    = os.environ.get("INSTAGRAM_USER_ID", "")
 INSTAGRAM_ACCESS_TOKEN = os.environ.get("INSTAGRAM_ACCESS_TOKEN", "")
-TIKTOK_ACCESS_TOKEN  = os.environ.get("TIKTOK_ACCESS_TOKEN", "")
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -124,70 +124,6 @@ def post_to_instagram(video_url: str, caption: str) -> bool:
     return False
 
 
-# ── TikTok ────────────────────────────────────────────────────────────────────
-
-def post_to_tiktok(video_path: str, caption: str) -> bool:
-    if not TIKTOK_ACCESS_TOKEN:
-        print("⚠️  TikTok credentials not configured — skipping.")
-        return False
-
-    file_size = os.path.getsize(video_path)
-    headers = {
-        "Authorization": f"Bearer {TIKTOK_ACCESS_TOKEN}",
-        "Content-Type":  "application/json; charset=UTF-8",
-    }
-
-    # 1. Initialize upload
-    print("🎵 Initializing TikTok upload...")
-    init = requests.post(
-        "https://open.tiktokapis.com/v2/post/publish/video/init/",
-        headers=headers,
-        json={
-            "post_info": {
-                "title":               caption[:150],
-                "privacy_level":       "PUBLIC_TO_EVERYONE",
-                "disable_duet":        False,
-                "disable_comment":     False,
-                "disable_stitch":      False,
-            },
-            "source_info": {
-                "source":             "FILE_UPLOAD",
-                "video_size":         file_size,
-                "chunk_size":         file_size,   # single chunk
-                "total_chunk_count":  1,
-            },
-        },
-        timeout=30,
-    )
-
-    if init.status_code != 200:
-        print(f"❌ TikTok init failed ({init.status_code}): {init.text}")
-        return False
-
-    data       = init.json().get("data", {})
-    publish_id = data.get("publish_id")
-    upload_url = data.get("upload_url")
-    print(f"   Publish ID: {publish_id}")
-
-    # 2. Upload file (single chunk)
-    print("📤 Uploading video to TikTok...")
-    with open(video_path, "rb") as f:
-        up = requests.put(
-            upload_url,
-            headers={
-                "Content-Type":  "video/mp4",
-                "Content-Range": f"bytes 0-{file_size-1}/{file_size}",
-            },
-            data=f,
-            timeout=300,
-        )
-
-    if up.status_code not in (200, 201):
-        print(f"❌ TikTok upload failed ({up.status_code}): {up.text}")
-        return False
-
-    print(f"✅ TikTok upload complete! Publish ID: {publish_id}")
-    return True
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -224,18 +160,17 @@ def main():
     if post_to_instagram(url, caption):
         posted_platforms.append("instagram")
 
-    # ── TikTok (needs local file) ──────────────────────────────────────────────
-    if TIKTOK_ACCESS_TOKEN:
-        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
-            tmp_path = tmp.name
-        try:
-            print(f"⬇️  Downloading video for TikTok ({s3_key})...")
-            s3.download_file(S3_BUCKET, s3_key, tmp_path)
-            if post_to_tiktok(tmp_path, caption):
-                posted_platforms.append("tiktok")
-        finally:
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
+    # ── TikTok (Playwright cookie tabanlı) ────────────────────────────────────
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+        tmp_path = tmp.name
+    try:
+        print(f"⬇️  TikTok için video indiriliyor ({s3_key})...")
+        s3.download_file(S3_BUCKET, s3_key, tmp_path)
+        if upload_to_tiktok(tmp_path, caption):
+            posted_platforms.append("tiktok")
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
     # ── Mark as posted ─────────────────────────────────────────────────────────
     if posted_platforms:

@@ -4,6 +4,10 @@ node_modules/
 # Environment variables - GİZLİ! Asla commit etme
 .env
 
+# TikTok session - GİZLİ! Asla commit etme
+automation/tiktok_session.json
+tiktok_session.json
+
 # Scraper runtime files
 scraper_status.json
 scraper_out.log
