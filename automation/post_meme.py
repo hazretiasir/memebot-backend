@@ -10,14 +10,12 @@ Runs via GitHub Actions 3x/day.
 
 import os
 import sys
-import json
-import random
 import time
 import tempfile
 import boto3
 import requests
 from pymongo import MongoClient
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from tiktok_upload import upload_to_tiktok
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -46,12 +44,11 @@ def get_instagram_token(db) -> str:
     if not token:
         return ""
 
-    # 45 günden eskiyse yenile
-    needs_refresh = True
+    # 45 günden eskiyse yenile, doc yoksa (ilk çalışma) sadece kaydet
+    needs_refresh = False
     if doc and doc.get("refreshed_at"):
-        from datetime import timedelta
-        age = datetime.now(timezone.utc) - doc["refreshed_at"].replace(tzinfo=timezone.utc)
-        needs_refresh = age.days >= 45
+        age = datetime.now(timezone.utc) - doc["refreshed_at"].astimezone(timezone.utc)
+        needs_refresh = age >= timedelta(days=45)
 
     if needs_refresh:
         print("🔄 Instagram token yenileniyor...")
@@ -259,7 +256,7 @@ def main():
         if post_to_instagram(url, caption, token=ig_token, thumbnail_url=thumb_url):
             posted_platforms.append("instagram")
 
-    # ── TikTok (Playwright cookie tabanlı) ────────────────────────────────────
+    # ── TikTok (Content Posting API) ──────────────────────────────────────────
     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
         tmp_path = tmp.name
     try:
