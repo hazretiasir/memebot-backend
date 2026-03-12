@@ -1,0 +1,33 @@
+name: MemeBot Weekly Stats
+
+on:
+  schedule:
+    # Her Pazartesi 07:00 UTC = 10:00 Türkiye
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+jobs:
+  weekly-stats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r automation/requirements.txt
+
+      - name: Send weekly stats
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python automation/weekly_stats.py
