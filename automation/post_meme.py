@@ -35,24 +35,20 @@ TIKTOK_ONLY          = os.environ.get("TIKTOK_ONLY", "").lower() == "true"
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def get_unposted_video(col):
-    """Returns a random video that hasn't been posted to social media yet.
-    Cycle reset: son 7 günde paylaşılmış videoları korur, gerisini sıfırlar."""
+    """Returns a random video that has never been posted to social media.
+    everPosted=True olan videolar sonsuza kadar atlanır, hiçbir zaman sıfırlanmaz."""
     pipeline = [
-        {"$match": {"socialPostedAt": {"$exists": False}}},
+        {"$match": {"everPosted": {"$ne": True}}},
         {"$sample": {"size": 1}},
         {"$project": {"_id": 1, "title": 1, "tags": 1, "s3Key": 1, "thumbnailKey": 1}},
     ]
     result = list(col.aggregate(pipeline))
 
     if not result:
-        from datetime import timedelta
-        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-        print("♻️  All videos posted — resetting cycle (son 7 gün korunuyor)...")
-        col.update_many(
-            {"socialPostedAt": {"$lt": cutoff}},
-            {"$unset": {"socialPostedAt": "", "socialPlatforms": ""}},
-        )
-        result = list(col.aggregate(pipeline))
+        total = col.count_documents({})
+        posted = col.count_documents({"everPosted": True})
+        print(f"⚠️  Tüm videolar paylaşıldı ({posted}/{total}) — yeni içerik eklenmesi gerekiyor.")
+        sys.exit(0)
 
     return result[0]
 
@@ -226,6 +222,7 @@ def main():
         col.update_one(
             {"_id": video["_id"]},
             {"$set": {
+                "everPosted":      True,
                 "socialPostedAt":  datetime.now(timezone.utc),
                 "socialPlatforms": posted_platforms,
             }},
