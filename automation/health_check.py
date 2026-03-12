@@ -27,6 +27,7 @@ TIKTOK_CLIENT_SECRET  = os.environ.get("TIKTOK_CLIENT_SECRET", "")
 errors = []
 s3_size_info = ""   # health check özetinde gösterilmek üzere
 
+S3_MAX_GB  = 5.0    # Toplam limit (GB)
 S3_WARN_GB = 4.0    # Bu eşiğin üzerinde uyarı ver
 
 
@@ -77,13 +78,14 @@ def check_s3():
                 total_count += 1
 
         size_gb = total_size / (1024 ** 3)
+        remaining_gb = S3_MAX_GB - size_gb
         size_str = f"{size_gb:.2f} GB" if size_gb >= 1 else f"{total_size / (1024 ** 2):.0f} MB"
-        s3_size_info = f"{total_count} obje, {size_str}"
+        s3_size_info = f"{total_count} obje — {size_gb:.2f} / {S3_MAX_GB:.0f} GB kullanıldı, {remaining_gb:.2f} GB kaldı"
 
         print(f"   ✅ S3 erişimi OK — {s3_size_info}")
 
         if size_gb >= S3_WARN_GB:
-            errors.append(f"⚠️  S3 bucket büyüklüğü {size_str} — depolama limitine yaklaşıyor!")
+            errors.append(f"⚠️  S3 bucket {size_gb:.2f} GB — limitine yaklaşıyor! Sadece {remaining_gb:.2f} GB kaldı.")
     except ClientError as e:
         errors.append(f"❌ S3 erişim hatası: {e}")
         print(f"   ❌ {e}")
@@ -160,15 +162,16 @@ def main():
     check_tiktok_token()
 
     print("\n" + "─" * 40)
+    size_line = f"\n\n☁️ <b>S3:</b> {s3_size_info}" if s3_size_info else ""
+
     if errors:
         print(f"❌ {len(errors)} sorun tespit edildi:")
         for e in errors:
             print(f"   {e}")
-        tg("🚨 <b>MemeBot Health Check BAŞARISIZ</b>\n\n" + "\n".join(errors))
+        tg("🚨 <b>MemeBot Health Check BAŞARISIZ</b>\n\n" + "\n".join(errors) + size_line)
         sys.exit(1)
     else:
         print("✅ Tüm kontroller başarılı — sistem sağlıklı.")
-        size_line = f"\n☁️ S3: {s3_size_info}" if s3_size_info else ""
         tg(f"✅ <b>MemeBot Health Check OK</b> — sistem sağlıklı.{size_line}")
 
 
