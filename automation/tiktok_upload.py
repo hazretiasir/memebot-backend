@@ -99,40 +99,48 @@ def _do_upload(page, video_path: str, caption: str) -> bool:
         print("❌ Oturum süresi dolmuş — tiktok_save_cookies.py ile yeniden kaydet.")
         return False
 
-    # Upload alanını bul — iframe içinde veya doğrudan sayfada
+    # Sayfa tamamen yüklenene kadar bekle
+    try:
+        page.wait_for_load_state("networkidle", timeout=15000)
+    except PlaywrightTimeout:
+        pass
+    time.sleep(4)
+
+    # Upload alanını bul — tüm frame'lerde ara
     print("🔍 Upload alanı aranıyor...")
+    print(f"   Frame sayısı: {len(page.frames)}")
     file_input = None
 
-    # 1) Tüm iframe'leri dene
-    iframe_selectors = [
-        "iframe[src*='tiktok']",
-        "iframe[src*='upload']",
-        "iframe",
-    ]
-    for iframe_sel in iframe_selectors:
+    # 1) Tüm yüklü frame'leri iterate et (frame_locator yerine)
+    for i, frame in enumerate(page.frames):
         try:
-            frame = page.frame_locator(iframe_sel).first
             fi = frame.locator("input[type='file']")
-            fi.wait_for(timeout=8000)
+            fi.wait_for(state="attached", timeout=3000)
             file_input = fi
-            print(f"  iframe ({iframe_sel}) içinde bulundu.")
+            print(f"  Frame[{i}] ({frame.url[:60]}) içinde bulundu.")
             break
         except PlaywrightTimeout:
             continue
 
-    # 2) Doğrudan sayfada ara
+    # 2) Sayfa yüklendikten sonra iframe'ler eklenmiş olabilir, tekrar dene
     if file_input is None:
-        try:
-            fi = page.locator("input[type='file']").first
-            fi.wait_for(timeout=8000)
-            file_input = fi
-            print("  Sayfa içinde bulundu.")
-        except PlaywrightTimeout:
-            pass
+        time.sleep(3)
+        for i, frame in enumerate(page.frames):
+            try:
+                fi = frame.locator("input[type='file']")
+                fi.wait_for(state="attached", timeout=2000)
+                file_input = fi
+                print(f"  2.tur Frame[{i}] içinde bulundu.")
+                break
+            except PlaywrightTimeout:
+                continue
 
     if file_input is None:
         print("❌ Dosya yükleme alanı bulunamadı.")
         print(f"   Mevcut URL: {page.url}")
+        # Hata ayıklama için frame URL'lerini listele
+        for i, frame in enumerate(page.frames):
+            print(f"   Frame[{i}]: {frame.url[:80]}")
         return False
 
     print(f"📤 Video seçiliyor: {video_path}")
