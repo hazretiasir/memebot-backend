@@ -61,7 +61,7 @@ def upload_to_tiktok(video_path: str, caption: str) -> bool:
     init_payload = {
         "post_info": {
             "title":              caption[:2200],
-            "privacy_level":      "PUBLIC_TO_EVERYONE",
+            "privacy_level":      "SELF_ONLY",  # Sandbox: sadece hesap sahibi görür. Production onayı sonrası PUBLIC_TO_EVERYONE yap.
             "disable_duet":       False,
             "disable_comment":    False,
             "disable_stitch":     False,
