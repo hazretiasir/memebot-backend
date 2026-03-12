@@ -5,6 +5,7 @@ const path = require('path');
 const axios = require('axios');
 const FormData = require('form-data');
 const ffmpegPath = require('ffmpeg-static');
+const { send: tg } = require('./telegram_notify');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const TARGET_ACCOUNTS = ['yalcdb', 'videolarsivi', 'BelalArsiv'];
@@ -111,7 +112,8 @@ async function scrapeTweetLinks(browser, targetAccount, baseProgress) {
 }
 
 async function downloadAndUpload(targetAccount, tweetUrls, baseProgress) {
-    if (tweetUrls.length === 0) return;
+    if (tweetUrls.length === 0) return 0;
+    let uploadedCount = 0;
 
     console.log(`\n[2/2] ${targetAccount} hesap indirme ve API yükleme aşaması başlıyor...`);
     const UPLOADED_DB_FILE = path.join(__dirname, '..', `uploaded_tweets_${targetAccount}.json`);
@@ -220,6 +222,7 @@ async function downloadAndUpload(targetAccount, tweetUrls, baseProgress) {
             });
 
             console.log(`✅ Başarıyla AWS / MongoDB yüklendi! DB ID: ${response.data.video._id}`);
+            uploadedCount++;
 
             uploadedUrls.add(url);
             fs.writeFileSync(UPLOADED_DB_FILE, JSON.stringify(Array.from(uploadedUrls), null, 2));
@@ -237,6 +240,7 @@ async function downloadAndUpload(targetAccount, tweetUrls, baseProgress) {
             } catch (e) { }
         }
     }
+    return uploadedCount;
 }
 
 async function runAutomation() {
@@ -246,6 +250,7 @@ async function runAutomation() {
     console.log("=================================================");
 
     updateProgress('running', `Avcı Başlatıldı, Bağlantı Kuruluyor...`, 0);
+    await tg(`🕵️ <b>Scraper başladı</b>\nHedefler: ${TARGET_ACCOUNTS.map(a => '@' + a).join(', ')}`);
 
     // 30 saniye içinde başlamazsa hata yaz
     let browser;
@@ -273,6 +278,9 @@ async function runAutomation() {
     }
 
 
+    let totalUploaded = 0;
+    const accountSummary = [];
+
     for (let i = 0; i < TARGET_ACCOUNTS.length; i++) {
         const target = TARGET_ACCOUNTS[i];
         const baseProgressPct = Math.floor(i * (100 / TARGET_ACCOUNTS.length));
@@ -287,9 +295,13 @@ async function runAutomation() {
                 });
             }
             const urls = await scrapeTweetLinks(browser, target, baseProgressPct);
-            await downloadAndUpload(target, urls, baseProgressPct);
+            const count = await downloadAndUpload(target, urls, baseProgressPct);
+            totalUploaded += count;
+            accountSummary.push(`@${target}: ${count} yeni video`);
         } catch (err) {
             console.error(`💥 ${target} hesabında kritik çökme:`, err.message);
+            accountSummary.push(`@${target}: 💥 hata`);
+            await tg(`💥 <b>Scraper crash!</b>\n@${target} hesabında hata:\n<code>${err.message}</code>`);
             // Browser öldüyse yeniden başlat
             if (err.message.includes('Connection closed') || err.message.includes('detached')) {
                 console.log('🔄 Browser yeniden başlatılıyor...');
@@ -310,6 +322,11 @@ async function runAutomation() {
     await browser.close();
     console.log('\n🚀 BÜTÜN HESAPLAR İÇİN OTOMASYON GÖREVİ TAMAMLANDI!');
     updateProgress('completed', 'Tüm görevler başarıyla tamamlandı!', 100);
+    await tg(
+        `✅ <b>Scraper tamamlandı</b>\n\n` +
+        accountSummary.join('\n') +
+        `\n\n📦 Toplam yeni video: <b>${totalUploaded}</b>`
+    );
 }
 
 if (require.main === module) {
