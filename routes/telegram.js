@@ -12,7 +12,7 @@ const CHAT_ID    = process.env.TELEGRAM_CHAT_ID  || '';
 const GITHUB_PAT = process.env.GITHUB_PAT        || '';
 const GITHUB_REPO = 'hazretiasir/memebot-backend';
 const S3_BUCKET   = process.env.S3_BUCKET_NAME   || '';
-const S3_MAX_GB   = 5.0;
+const S3_MAX_GB   = 20.0;
 
 function authorized(chatId) {
     return String(chatId) === String(CHAT_ID);

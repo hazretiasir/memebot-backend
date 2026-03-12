@@ -27,8 +27,8 @@ TIKTOK_CLIENT_SECRET  = os.environ.get("TIKTOK_CLIENT_SECRET", "")
 errors = []
 s3_size_info = ""   # health check özetinde gösterilmek üzere
 
-S3_MAX_GB  = 5.0    # Toplam limit (GB)
-S3_WARN_GB = 4.0    # Bu eşiğin üzerinde uyarı ver
+S3_MAX_GB  = 20.0   # Toplam limit (GB)
+S3_WARN_GB = 18.0   # Bu eşiğin üzerinde uyarı ver
 
 
 def check_mongodb():
