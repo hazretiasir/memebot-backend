@@ -30,6 +30,7 @@ S3_BUCKET            = os.environ["S3_BUCKET_NAME"]
 
 INSTAGRAM_USER_ID    = os.environ.get("INSTAGRAM_USER_ID", "")
 INSTAGRAM_ACCESS_TOKEN = os.environ.get("INSTAGRAM_ACCESS_TOKEN", "")
+TIKTOK_ONLY          = os.environ.get("TIKTOK_ONLY", "").lower() == "true"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -156,9 +157,12 @@ def main():
     posted_platforms = []
 
     # ── Instagram (presigned URL → no local download needed) ──────────────────
-    url = presigned_url(s3, s3_key, expires=7200)
-    if post_to_instagram(url, caption):
-        posted_platforms.append("instagram")
+    if TIKTOK_ONLY:
+        print("⏭️  Instagram atlandı (tiktok_only modu).")
+    else:
+        url = presigned_url(s3, s3_key, expires=7200)
+        if post_to_instagram(url, caption):
+            posted_platforms.append("instagram")
 
     # ── TikTok (Playwright cookie tabanlı) ────────────────────────────────────
     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
