@@ -15,7 +15,7 @@ on:
 
 jobs:
   post-meme:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
@@ -33,7 +33,7 @@ jobs:
         run: pip install -r automation/requirements.txt
 
       - name: Install Playwright browsers
-        run: playwright install chromium
+        run: playwright install chromium --with-deps
 
       - name: Run auto-poster
         env:
