@@ -17,6 +17,7 @@ import requests
 from pymongo import MongoClient
 from datetime import datetime, timezone, timedelta
 from tiktok_upload import upload_to_tiktok
+from telegram_notify import send as tg
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -279,8 +280,19 @@ def main():
             }},
         )
         print(f"✅ Marked as posted on: {', '.join(posted_platforms)}")
+        platforms_str = " + ".join(p.capitalize() for p in posted_platforms)
+        tg(
+            f"✅ <b>MemeBot yeni video paylaştı!</b>\n\n"
+            f"🎬 <b>{video['title']}</b>\n"
+            f"📲 Platform: {platforms_str}"
+        )
     else:
         print("⚠️  No platform succeeded — video NOT marked as posted.")
+        tg(
+            f"⚠️ <b>MemeBot paylaşım başarısız!</b>\n\n"
+            f"🎬 Video: {video['title']}\n"
+            f"Hiçbir platforma paylaşılamadı."
+        )
 
     client.close()
     print("🏁 Done!")

@@ -11,6 +11,7 @@ import requests
 import boto3
 from pymongo import MongoClient
 from botocore.exceptions import ClientError
+from telegram_notify import send as tg
 
 MONGODB_URI           = os.environ["MONGODB_URI"]
 AWS_ACCESS_KEY_ID     = os.environ["AWS_ACCESS_KEY_ID"]
@@ -144,9 +145,11 @@ def main():
         print(f"❌ {len(errors)} sorun tespit edildi:")
         for e in errors:
             print(f"   {e}")
+        tg("🚨 <b>MemeBot Health Check BAŞARISIZ</b>\n\n" + "\n".join(errors))
         sys.exit(1)
     else:
         print("✅ Tüm kontroller başarılı — sistem sağlıklı.")
+        tg("✅ <b>MemeBot Health Check OK</b> — sistem sağlıklı.")
 
 
 if __name__ == "__main__":

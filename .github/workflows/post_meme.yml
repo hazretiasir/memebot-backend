@@ -47,6 +47,8 @@ jobs:
           TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
           TIKTOK_OPEN_ID: ${{ secrets.TIKTOK_OPEN_ID }}
           TIKTOK_ONLY: ${{ github.event.inputs.tiktok_only }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python automation/post_meme.py
 
       - name: Upload failure screenshots
