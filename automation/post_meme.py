@@ -61,11 +61,11 @@ def presigned_url(s3, key, expires=3600):
 
 
 def build_caption(video):
-    title = video.get("title", "Meme Video")
-    tags  = video.get("tags", [])
+    title    = video.get("title", "Meme Video")
+    tags     = video.get("tags", [])
     hashtags = " ".join(f"#{t.replace(' ', '')}" for t in tags[:10] if t)
-    base  = "#meme #memes #komedi #memevideo #türkmeme #eğlence #funnyvideo"
-    return f"{title}\n\n{hashtags}\n{base}".strip()
+    cta      = "📲 Türkiye'nin en iyi meme uygulaması → bio'da"
+    return f"{title}\n\n{cta}\n\n{hashtags}".strip()
 
 
 # ── Instagram ─────────────────────────────────────────────────────────────────
