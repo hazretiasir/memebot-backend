@@ -36,17 +36,22 @@ TIKTOK_ONLY          = os.environ.get("TIKTOK_ONLY", "").lower() == "true"
 
 def get_unposted_video(col):
     """Returns a random video that hasn't been posted to social media yet.
-    If all videos have been posted, resets the cycle and starts over."""
+    Cycle reset: son 7 günde paylaşılmış videoları korur, gerisini sıfırlar."""
     pipeline = [
         {"$match": {"socialPostedAt": {"$exists": False}}},
         {"$sample": {"size": 1}},
-        {"$project": {"_id": 1, "title": 1, "tags": 1, "s3Key": 1}},
+        {"$project": {"_id": 1, "title": 1, "tags": 1, "s3Key": 1, "thumbnailKey": 1}},
     ]
     result = list(col.aggregate(pipeline))
 
     if not result:
-        print("♻️  All videos posted — resetting cycle...")
-        col.update_many({}, {"$unset": {"socialPostedAt": "", "socialPlatforms": ""}})
+        from datetime import timedelta
+        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        print("♻️  All videos posted — resetting cycle (son 7 gün korunuyor)...")
+        col.update_many(
+            {"socialPostedAt": {"$lt": cutoff}},
+            {"$unset": {"socialPostedAt": "", "socialPlatforms": ""}},
+        )
         result = list(col.aggregate(pipeline))
 
     return result[0]
@@ -70,22 +75,27 @@ def build_caption(video):
 
 # ── Instagram ─────────────────────────────────────────────────────────────────
 
-def post_to_instagram(video_url: str, caption: str) -> bool:
+def post_to_instagram(video_url: str, caption: str, thumbnail_url: str = None) -> bool:
     if not INSTAGRAM_USER_ID or not INSTAGRAM_ACCESS_TOKEN:
         print("⚠️  Instagram credentials not configured — skipping.")
         return False
 
     base = f"https://graph.facebook.com/v18.0/{INSTAGRAM_USER_ID}"
 
-    # 1. Create media container
+    # 1. Create Reel container
     print("📸 Creating Instagram Reel container...")
-    r = requests.post(f"{base}/media", data={
+    params = {
         "media_type":    "REELS",
         "video_url":     video_url,
         "caption":       caption,
         "share_to_feed": "true",
         "access_token":  INSTAGRAM_ACCESS_TOKEN,
-    }, timeout=30)
+    }
+    if thumbnail_url:
+        params["cover_url"] = thumbnail_url
+        print(f"   Thumbnail URL eklendi.")
+
+    r = requests.post(f"{base}/media", data=params, timeout=30)
 
     if r.status_code != 200:
         print(f"❌ Container creation failed ({r.status_code}): {r.text}")
@@ -110,19 +120,52 @@ def post_to_instagram(video_url: str, caption: str) -> bool:
             print("❌ Instagram processing error.")
             return False
 
-    # 3. Publish
+    # 3. Publish Reel
     print("🚀 Publishing Reel...")
     pub = requests.post(f"{base}/media_publish", data={
         "creation_id": container_id,
         "access_token": INSTAGRAM_ACCESS_TOKEN,
     }, timeout=30)
 
-    if pub.status_code == 200:
-        print(f"✅ Instagram published! Media ID: {pub.json().get('id')}")
-        return True
+    if pub.status_code != 200:
+        print(f"❌ Publish failed ({pub.status_code}): {pub.text}")
+        return False
 
-    print(f"❌ Publish failed ({pub.status_code}): {pub.text}")
-    return False
+    media_id = pub.json().get("id")
+    print(f"✅ Instagram Reel published! Media ID: {media_id}")
+
+    # 4. Story — thumbnail varsa image story, yoksa atla
+    if thumbnail_url:
+        _post_instagram_story(base, thumbnail_url)
+
+    return True
+
+
+def _post_instagram_story(base: str, thumbnail_url: str):
+    """Thumbnail ile Instagram Story paylaşır."""
+    print("📖 Instagram Story paylaşılıyor...")
+    r = requests.post(f"{base}/media", data={
+        "media_type":   "STORIES",
+        "image_url":    thumbnail_url,
+        "access_token": INSTAGRAM_ACCESS_TOKEN,
+    }, timeout=30)
+
+    if r.status_code != 200:
+        print(f"⚠️  Story container hatası ({r.status_code}): {r.text[:100]}")
+        return
+
+    story_id = r.json().get("id")
+    time.sleep(3)
+
+    pub = requests.post(f"{base}/media_publish", data={
+        "creation_id":  story_id,
+        "access_token": INSTAGRAM_ACCESS_TOKEN,
+    }, timeout=30)
+
+    if pub.status_code == 200:
+        print(f"✅ Instagram Story published!")
+    else:
+        print(f"⚠️  Story publish hatası ({pub.status_code}): {pub.text[:100]}")
 
 
 
@@ -160,8 +203,10 @@ def main():
     if TIKTOK_ONLY:
         print("⏭️  Instagram atlandı (tiktok_only modu).")
     else:
-        url = presigned_url(s3, s3_key, expires=7200)
-        if post_to_instagram(url, caption):
+        url           = presigned_url(s3, s3_key, expires=7200)
+        thumbnail_key = video.get("thumbnailKey")
+        thumb_url     = presigned_url(s3, thumbnail_key, expires=7200) if thumbnail_key else None
+        if post_to_instagram(url, caption, thumbnail_url=thumb_url):
             posted_platforms.append("instagram")
 
     # ── TikTok (Playwright cookie tabanlı) ────────────────────────────────────
