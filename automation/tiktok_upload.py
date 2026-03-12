@@ -80,31 +80,60 @@ def _run_upload(session_file: str, video_path: str, caption: str) -> bool:
 
 def _do_upload(page, video_path: str, caption: str) -> bool:
     print("🎵 TikTok upload sayfasına gidiliyor...")
-    page.goto("https://www.tiktok.com/upload", wait_until="networkidle", timeout=30000)
-    time.sleep(2)
 
-    # Oturum geçerliliğini kontrol et
-    if "login" in page.url.lower():
+    # Creator Center URL'ini dene, fallback olarak eski URL
+    upload_urls = [
+        "https://www.tiktok.com/creator-center/upload",
+        "https://www.tiktok.com/upload",
+    ]
+    for url in upload_urls:
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            time.sleep(3)
+            if "login" not in page.url.lower():
+                print(f"✅ Oturum aktif. ({url})")
+                break
+        except Exception:
+            continue
+    else:
         print("❌ Oturum süresi dolmuş — tiktok_save_cookies.py ile yeniden kaydet.")
         return False
 
-    print("✅ Oturum aktif.")
-
-    # Upload iframe'ini bul
+    # Upload alanını bul — iframe içinde veya doğrudan sayfada
     print("🔍 Upload alanı aranıyor...")
-    try:
-        # TikTok upload sayfası bir iframe içinde geliyor
-        frame = page.frame_locator("iframe").first
-        file_input = frame.locator("input[type='file']")
-        file_input.wait_for(timeout=15000)
-    except PlaywrightTimeout:
-        # Bazen iframe olmadan doğrudan gelir
-        file_input = page.locator("input[type='file']")
+    file_input = None
+
+    # 1) Tüm iframe'leri dene
+    iframe_selectors = [
+        "iframe[src*='tiktok']",
+        "iframe[src*='upload']",
+        "iframe",
+    ]
+    for iframe_sel in iframe_selectors:
         try:
-            file_input.wait_for(timeout=10000)
+            frame = page.frame_locator(iframe_sel).first
+            fi = frame.locator("input[type='file']")
+            fi.wait_for(timeout=8000)
+            file_input = fi
+            print(f"  iframe ({iframe_sel}) içinde bulundu.")
+            break
         except PlaywrightTimeout:
-            print("❌ Dosya yükleme alanı bulunamadı.")
-            return False
+            continue
+
+    # 2) Doğrudan sayfada ara
+    if file_input is None:
+        try:
+            fi = page.locator("input[type='file']").first
+            fi.wait_for(timeout=8000)
+            file_input = fi
+            print("  Sayfa içinde bulundu.")
+        except PlaywrightTimeout:
+            pass
+
+    if file_input is None:
+        print("❌ Dosya yükleme alanı bulunamadı.")
+        print(f"   Mevcut URL: {page.url}")
+        return False
 
     print(f"📤 Video seçiliyor: {video_path}")
     file_input.set_input_files(video_path)
