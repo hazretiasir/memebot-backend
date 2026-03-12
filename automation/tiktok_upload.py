@@ -101,36 +101,39 @@ def _do_upload(page, video_path: str, caption: str) -> bool:
 
     # Sayfa tamamen yüklenene kadar bekle
     try:
-        page.wait_for_load_state("networkidle", timeout=15000)
+        page.wait_for_load_state("networkidle", timeout=20000)
     except PlaywrightTimeout:
         pass
-    time.sleep(4)
+    time.sleep(6)
 
-    # Upload alanını bul — tüm frame'lerde ara
+    # Hata ayıklama: sayfada ne var?
+    page_text = page.evaluate("() => document.body ? document.body.innerText.slice(0, 300) : 'no body'")
+    print(f"   Sayfa içeriği (ilk 300 kar): {page_text[:300]}")
+    file_input_count = page.evaluate("() => document.querySelectorAll('input[type=\"file\"]').length")
+    print(f"   File input sayısı (JS): {file_input_count}")
+
+    # Upload alanını bul — hidden dahil tüm input[type=file]
     print("🔍 Upload alanı aranıyor...")
     print(f"   Frame sayısı: {len(page.frames)}")
     file_input = None
 
-    # 1) Tüm yüklü frame'leri iterate et (frame_locator yerine)
-    for i, frame in enumerate(page.frames):
-        try:
-            fi = frame.locator("input[type='file']")
-            fi.wait_for(state="attached", timeout=3000)
-            file_input = fi
-            print(f"  Frame[{i}] ({frame.url[:60]}) içinde bulundu.")
-            break
-        except PlaywrightTimeout:
-            continue
+    # 1) Ana sayfada hidden dahil ara
+    try:
+        fi = page.locator("input[type='file']").first
+        fi.wait_for(state="attached", timeout=10000)
+        file_input = fi
+        print("  Ana sayfada (attached) bulundu.")
+    except PlaywrightTimeout:
+        pass
 
-    # 2) Sayfa yüklendikten sonra iframe'ler eklenmiş olabilir, tekrar dene
+    # 2) Tüm frame'lerde ara
     if file_input is None:
-        time.sleep(3)
         for i, frame in enumerate(page.frames):
             try:
                 fi = frame.locator("input[type='file']")
-                fi.wait_for(state="attached", timeout=2000)
+                fi.wait_for(state="attached", timeout=3000)
                 file_input = fi
-                print(f"  2.tur Frame[{i}] içinde bulundu.")
+                print(f"  Frame[{i}] içinde bulundu.")
                 break
             except PlaywrightTimeout:
                 continue
@@ -138,7 +141,6 @@ def _do_upload(page, video_path: str, caption: str) -> bool:
     if file_input is None:
         print("❌ Dosya yükleme alanı bulunamadı.")
         print(f"   Mevcut URL: {page.url}")
-        # Hata ayıklama için frame URL'lerini listele
         for i, frame in enumerate(page.frames):
             print(f"   Frame[{i}]: {frame.url[:80]}")
         return False
