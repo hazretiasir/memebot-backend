@@ -78,7 +78,7 @@ router.post('/upload', upload.single('video'), async (req, res) => {
         return res.status(400).json({ error: 'No video file provided' });
     }
 
-    const { title, tags, uploadedBy, tweetUrl, sourceLikes, sourceViews } = req.body;
+    const { title, tags, uploadedBy, tweetUrl } = req.body;
     if (!title) {
         return res.status(400).json({ error: 'Title is required' });
     }
@@ -115,8 +115,6 @@ router.post('/upload', upload.single('video'), async (req, res) => {
             s3Url,
             uploadedBy: uploadedBy || 'anonymous',
             tweetUrl: tweetUrl || null,
-            likes:     parseInt(sourceLikes) || 0,
-            viewCount: parseInt(sourceViews) || 0,
         });
 
         await video.save();
