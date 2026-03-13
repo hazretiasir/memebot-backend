@@ -5,36 +5,259 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Privacy Policy — Meme Bot</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 800px; margin: 60px auto; padding: 0 20px; color: #333; }
-    h1, h2 { color: #111; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: #f9f9f9;
+      color: #222;
+      line-height: 1.7;
+    }
+    header {
+      background: #111;
+      padding: 20px 0;
+      text-align: center;
+    }
+    header a {
+      color: #fff;
+      text-decoration: none;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    header a span { color: #f59e0b; }
+    .container {
+      max-width: 860px;
+      margin: 48px auto;
+      padding: 0 24px 64px;
+    }
+    h1 {
+      font-size: 32px;
+      font-weight: 800;
+      margin-bottom: 6px;
+      color: #111;
+    }
+    .meta { color: #666; font-size: 14px; margin-bottom: 40px; }
+    h2 {
+      font-size: 19px;
+      font-weight: 700;
+      margin: 36px 0 10px;
+      color: #111;
+      padding-bottom: 6px;
+      border-bottom: 2px solid #f59e0b;
+      display: inline-block;
+    }
+    p { margin-bottom: 14px; color: #444; }
+    ul, ol { margin: 10px 0 14px 24px; color: #444; }
+    li { margin-bottom: 6px; }
+    a { color: #f59e0b; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .section { margin-bottom: 8px; }
+    .highlight-box {
+      background: #fff8e1;
+      border-left: 4px solid #f59e0b;
+      padding: 14px 18px;
+      border-radius: 4px;
+      margin: 16px 0;
+      color: #555;
+      font-size: 15px;
+    }
+    footer {
+      text-align: center;
+      font-size: 13px;
+      color: #999;
+      padding: 24px;
+      border-top: 1px solid #e5e5e5;
+    }
   </style>
 </head>
 <body>
+
+<header>
+  <a href="index.html">Meme <span>Bot</span></a>
+</header>
+
+<div class="container">
   <h1>Privacy Policy</h1>
-  <p><em>Last updated: March 12, 2026</em></p>
+  <p class="meta">Last updated: March 13, 2026 &nbsp;|&nbsp; Effective date: March 13, 2026</p>
 
-  <h2>1. Information We Collect</h2>
-  <p>Meme Bot does not collect personal data from end users. The tool operates solely on behalf of the account owner to automate content posting.</p>
+  <div class="highlight-box">
+    This Privacy Policy explains how Meme Bot ("we", "our", or "us") collects, uses, and protects information when you use our application and related services. By using Meme Bot, you agree to the practices described in this policy.
+  </div>
 
-  <h2>2. TikTok API Data</h2>
-  <p>Meme Bot uses the TikTok Content Posting API. Access tokens are stored securely as encrypted GitHub Secrets and are never shared with third parties.</p>
+  <div class="section">
+    <h2>1. Overview</h2>
+    <p>Meme Bot is a mobile application that helps users discover, download, and share meme video content. The app integrates with third-party platforms including TikTok, Instagram, and Google AdMob to deliver its features.</p>
+    <p>We are committed to protecting your privacy. This policy covers:</p>
+    <ul>
+      <li>What information we collect and why</li>
+      <li>How we use and share that information</li>
+      <li>Your rights and choices</li>
+      <li>How we protect your data</li>
+    </ul>
+  </div>
 
-  <h2>3. Data Storage</h2>
-  <p>No user data is stored on external servers. Video content is sourced from the account owner's private AWS S3 bucket.</p>
+  <div class="section">
+    <h2>2. Information We Collect</h2>
 
-  <h2>4. Third-Party Services</h2>
-  <p>Meme Bot interacts with the following third-party services:</p>
-  <ul>
-    <li>TikTok API (content posting)</li>
-    <li>Instagram Graph API (content posting)</li>
-    <li>Amazon S3 (video storage)</li>
-    <li>MongoDB (video metadata)</li>
-  </ul>
+    <p><strong>2.1 Information You Provide Directly</strong></p>
+    <ul>
+      <li><strong>Account credentials:</strong> If you authenticate via TikTok OAuth, we receive an access token and your TikTok open ID (a platform-specific identifier). We do not receive or store your TikTok password.</li>
+      <li><strong>Content you upload:</strong> Videos and titles you submit to the archive feature are stored on our servers to power the recommendation engine.</li>
+      <li><strong>Search queries:</strong> Text you enter in the search/chat feature to find meme videos.</li>
+    </ul>
 
-  <h2>5. Data Retention</h2>
-  <p>No personal data is retained by Meme Bot.</p>
+    <p><strong>2.2 Information Collected Automatically</strong></p>
+    <ul>
+      <li><strong>Device information:</strong> Device model, operating system version, app version, and unique device identifiers (used by AdMob for ad targeting).</li>
+      <li><strong>Usage data:</strong> Features accessed, videos viewed, actions taken (like, save, share), session duration, and crash reports.</li>
+      <li><strong>IP address:</strong> Collected by our backend server for security monitoring and abuse prevention. Not linked to your identity.</li>
+      <li><strong>Log data:</strong> Server-side logs including timestamps and API request metadata. Logs are retained for up to 30 days.</li>
+    </ul>
 
-  <h2>6. Contact</h2>
-  <p>For privacy-related questions, contact us via the <a href="https://github.com/hazretiasir/memebot-backend">GitHub repository</a>.</p>
+    <p><strong>2.3 Information from Third Parties</strong></p>
+    <ul>
+      <li><strong>TikTok API:</strong> When you connect your TikTok account, we receive your TikTok user ID and access/refresh tokens necessary to post content on your behalf. We do not access your followers, messages, or private information beyond what is required to post content.</li>
+      <li><strong>Google AdMob:</strong> Our app displays ads served by Google AdMob. Google may collect device identifiers, IP address, and usage data subject to <a href="https://policies.google.com/privacy" target="_blank">Google's Privacy Policy</a>.</li>
+      <li><strong>In-App Purchases:</strong> Purchases are processed by Google Play. We receive a confirmation of purchase status but not your payment details.</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>3. How We Use Your Information</h2>
+    <p>We use the collected information for the following purposes:</p>
+    <ul>
+      <li><strong>Providing the service:</strong> Delivering meme video recommendations, enabling downloads, and posting content to connected platforms.</li>
+      <li><strong>Personalization:</strong> Remembering your saved collections, liked videos, and preferences across sessions.</li>
+      <li><strong>Improving the service:</strong> Analyzing usage patterns to improve features, fix bugs, and optimize performance.</li>
+      <li><strong>Security and fraud prevention:</strong> Detecting and preventing unauthorized access, abuse, or violations of our Terms of Service.</li>
+      <li><strong>Advertising:</strong> Displaying relevant ads through Google AdMob to support the free tier of the service.</li>
+      <li><strong>Customer support:</strong> Responding to inquiries and resolving technical issues.</li>
+      <li><strong>Legal compliance:</strong> Complying with applicable laws, regulations, and lawful requests from authorities.</li>
+    </ul>
+    <p>We do not sell your personal information to third parties. We do not use your data for automated decision-making that produces legal or similarly significant effects on you.</p>
+  </div>
+
+  <div class="section">
+    <h2>4. How We Share Your Information</h2>
+    <p>We share information only in the following circumstances:</p>
+    <ul>
+      <li><strong>With your consent:</strong> When you explicitly authorize sharing, such as connecting your TikTok account.</li>
+      <li><strong>Service providers:</strong> We use trusted third-party services to operate Meme Bot:
+        <ul>
+          <li>MongoDB Atlas — database hosting (video metadata, user preferences)</li>
+          <li>Amazon Web Services (S3) — video file storage</li>
+          <li>Render.com — backend server hosting</li>
+          <li>Google AdMob — advertising</li>
+          <li>Google Play — in-app purchase processing</li>
+        </ul>
+        These providers access data only as necessary to perform services on our behalf and are bound by confidentiality obligations.
+      </li>
+      <li><strong>TikTok API:</strong> When you use the TikTok posting feature, your content and access token are transmitted to TikTok in accordance with TikTok's Developer Terms of Service.</li>
+      <li><strong>Legal requirements:</strong> We may disclose information if required by law, court order, or governmental authority.</li>
+      <li><strong>Business transfers:</strong> In the event of a merger, acquisition, or sale of assets, user data may be transferred as part of that transaction. We will notify you before your data is subject to a different privacy policy.</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>5. TikTok API Data Usage</h2>
+    <p>Meme Bot uses the TikTok Content Posting API. In connection with this integration:</p>
+    <ul>
+      <li>We request only the minimum permissions necessary: <strong>video.publish</strong> (to post videos on your behalf).</li>
+      <li>TikTok access tokens and refresh tokens are stored securely using encrypted storage and are never exposed to end users or logged.</li>
+      <li>We do not access your TikTok inbox, followers list, liked videos, or any data beyond what is needed to post content.</li>
+      <li>Token data is retained only as long as necessary to operate the TikTok posting feature. You may revoke access at any time via TikTok's app permissions settings.</li>
+      <li>All data exchanged with the TikTok API is transmitted over HTTPS/TLS.</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>6. Data Retention</h2>
+    <p>We retain your data for as long as necessary to provide the service and comply with legal obligations:</p>
+    <ul>
+      <li><strong>Account/session data:</strong> Retained while the app is in use on your device. Local preferences (likes, collections) are stored on your device and can be cleared by uninstalling the app.</li>
+      <li><strong>Uploaded video metadata:</strong> Retained in our database indefinitely to power the content archive. You may request deletion by contacting us.</li>
+      <li><strong>TikTok tokens:</strong> Retained as long as the TikTok posting feature is active. Deleted upon revocation or service termination.</li>
+      <li><strong>Server logs:</strong> Retained for up to 30 days for security purposes, then automatically deleted.</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>7. Cookies and Tracking Technologies</h2>
+    <p>The Meme Bot mobile application itself does not use cookies. However:</p>
+    <ul>
+      <li>Our backend web server may use session tokens in HTTP headers for API authentication.</li>
+      <li>Google AdMob may use advertising identifiers (GAID on Android) for ad personalization. You can opt out of personalized ads via your device settings (Settings → Google → Ads → Opt out of Ads Personalization).</li>
+      <li>Our website (this page) does not use tracking cookies or analytics scripts.</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>8. Data Security</h2>
+    <p>We implement industry-standard security measures to protect your information:</p>
+    <ul>
+      <li>All data transmitted between the app and our servers uses TLS encryption (HTTPS).</li>
+      <li>API keys, tokens, and secrets are stored as encrypted environment variables and never committed to public repositories.</li>
+      <li>Access to our database and cloud infrastructure is restricted to authorized personnel only.</li>
+      <li>We regularly review and update our security practices.</li>
+    </ul>
+    <p>No method of transmission over the Internet is 100% secure. While we strive to protect your information, we cannot guarantee absolute security. Please notify us immediately if you suspect any unauthorized access to your account.</p>
+  </div>
+
+  <div class="section">
+    <h2>9. Children's Privacy</h2>
+    <p>Meme Bot is not directed to children under the age of 13 (or 16 in the European Economic Area). We do not knowingly collect personal information from children. If you are a parent or guardian and believe your child has provided us with personal information, please contact us immediately and we will delete that information from our systems.</p>
+  </div>
+
+  <div class="section">
+    <h2>10. Your Rights and Choices</h2>
+    <p>Depending on your location, you may have the following rights regarding your personal data:</p>
+    <ul>
+      <li><strong>Access:</strong> Request a copy of the personal data we hold about you.</li>
+      <li><strong>Correction:</strong> Request correction of inaccurate or incomplete data.</li>
+      <li><strong>Deletion:</strong> Request deletion of your personal data ("right to be forgotten").</li>
+      <li><strong>Portability:</strong> Request your data in a structured, machine-readable format.</li>
+      <li><strong>Objection:</strong> Object to processing of your data for certain purposes (e.g., direct marketing).</li>
+      <li><strong>Restriction:</strong> Request that we restrict processing of your data in certain circumstances.</li>
+      <li><strong>Withdrawal of consent:</strong> Where processing is based on your consent, you may withdraw it at any time.</li>
+    </ul>
+    <p>To exercise any of these rights, contact us at the address below. We will respond within 30 days. For EU/EEA residents, you also have the right to lodge a complaint with your local data protection authority.</p>
+
+    <p><strong>California Residents (CCPA):</strong> California residents have additional rights under the California Consumer Privacy Act, including the right to know what personal information is collected, the right to delete personal information, and the right to opt out of the sale of personal information. We do not sell personal information. To submit a request, contact us at the address below.</p>
+  </div>
+
+  <div class="section">
+    <h2>11. International Data Transfers</h2>
+    <p>Meme Bot is operated from Turkey. Our servers are located in the United States (via Render.com and AWS). If you are located in the European Economic Area, United Kingdom, or other regions with data transfer restrictions, please note that your data may be transferred to and processed in countries where data protection laws may differ from those in your country.</p>
+    <p>We ensure appropriate safeguards are in place for international transfers, including relying on service providers that maintain certifications or standard contractual clauses where required.</p>
+  </div>
+
+  <div class="section">
+    <h2>12. Third-Party Links and Services</h2>
+    <p>The Meme Bot app may display content from or link to third-party platforms (TikTok, Instagram, Reddit, Twitter/X, Pinterest). These platforms have their own privacy policies, and we are not responsible for their data practices. We encourage you to review the privacy policies of any third-party services you use.</p>
+  </div>
+
+  <div class="section">
+    <h2>13. Changes to This Privacy Policy</h2>
+    <p>We may update this Privacy Policy from time to time. When we make significant changes, we will update the "Last updated" date at the top of this page and, where appropriate, notify users through the application or by other means. Your continued use of Meme Bot after any changes constitutes acceptance of the updated policy.</p>
+  </div>
+
+  <div class="section">
+    <h2>14. Contact Us</h2>
+    <p>If you have questions, concerns, or requests regarding this Privacy Policy or your personal data, please contact us:</p>
+    <ul>
+      <li><strong>Email:</strong> <a href="mailto:privacy@memebot.app">privacy@memebot.app</a></li>
+      <li><strong>GitHub:</strong> <a href="https://github.com/hazretiasir/memebot-backend" target="_blank">github.com/hazretiasir/memebot-backend</a></li>
+      <li><strong>Website:</strong> <a href="https://hazretiasir.github.io/memebot-backend/">memebot.app</a></li>
+    </ul>
+    <p>We will respond to privacy-related inquiries within 30 days of receipt.</p>
+  </div>
+</div>
+
+<footer>
+  &copy; 2026 Meme Bot. All rights reserved. &nbsp;|&nbsp;
+  <a href="index.html">Home</a> &nbsp;|&nbsp;
+  <a href="terms.html">Terms of Service</a>
+</footer>
+
 </body>
 </html>
