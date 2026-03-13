@@ -16,7 +16,9 @@ if (process.platform === 'win32') {
 
 const binDir  = path.join(__dirname, '..', 'bin');
 const binPath = path.join(binDir, 'yt-dlp');
-const url     = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
+// yt-dlp_linux = gerçek standalone binary (Python gerektirmez)
+// yt-dlp       = Python zipapp (Python 3.9+ gerektirir, Render'da versiyon uyumsuzluğu)
+const url     = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux';
 
 if (!fs.existsSync(binDir)) fs.mkdirSync(binDir, { recursive: true });
 
