@@ -45,19 +45,28 @@ router.post('/download', async (req, res) => {
             ],
         };
 
+        // Pinterest'in proprietary formatları (V_720P vb.) standart ext filtresiyle eşleşmiyor.
+        // pin.it veya pinterest.com URL'leri için format kısıtlaması olmadan çalıştır.
+        const isPinterest = url.includes('pinterest.com') || url.includes('pin.it');
+
         let info;
         try {
-            info = await youtubedl(url, {
-                ...baseOpts,
-                format: 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=mp4]/best',
-            });
+            if (isPinterest) {
+                // Format belirtme — yt-dlp mevcut tüm formatları döndürür,
+                // aşağıdaki fallback kodu en iyi URL'yi formats[] dizisinden seçer.
+                info = await youtubedl(url, { ...baseOpts });
+            } else {
+                info = await youtubedl(url, {
+                    ...baseOpts,
+                    format: 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=mp4]/best',
+                });
+            }
         } catch (firstErr) {
-            // Pinterest ve bazı platformlar ext kısıtlı format stringiyle başarısız olabiliyor.
-            // "Requested format is not available" hatasında ext kısıtlaması olmadan tekrar dene.
+            // Format eşleşmezse format kısıtlamasını tamamen kaldırarak tekrar dene.
             const errText = firstErr.stderr || firstErr.message || '';
-            if (errText.includes('Requested format is not available')) {
-                console.log('[Downloader] Format not found, retrying with "best"...');
-                info = await youtubedl(url, { ...baseOpts, format: 'best' });
+            if (errText.includes('Requested format is not available') || errText.includes('format')) {
+                console.log('[Downloader] Format not found, retrying without format filter...');
+                info = await youtubedl(url, { ...baseOpts });
             } else {
                 throw firstErr;
             }
