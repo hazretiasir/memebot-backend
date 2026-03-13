@@ -6,47 +6,20 @@ Token otomatik yenilenir.
 """
 
 import os
-import json
 import math
 import time
 import requests
 from telegram_notify import send as tg
 
-CLIENT_KEY     = os.environ.get("TIKTOK_CLIENT_KEY", "")
-CLIENT_SECRET  = os.environ.get("TIKTOK_CLIENT_SECRET", "")
-ACCESS_TOKEN   = os.environ.get("TIKTOK_ACCESS_TOKEN", "")
-REFRESH_TOKEN  = os.environ.get("TIKTOK_REFRESH_TOKEN", "")
-
 BASE = "https://open.tiktokapis.com"
 
 
-def _get_token() -> str:
-    """Access token'ı refresh token ile yeniler, yeni token'ı döner."""
-    if not REFRESH_TOKEN:
-        return ACCESS_TOKEN
-
-    resp = requests.post(f"{BASE}/v2/oauth/token/", data={
-        "client_key":    CLIENT_KEY,
-        "client_secret": CLIENT_SECRET,
-        "grant_type":    "refresh_token",
-        "refresh_token": REFRESH_TOKEN,
-    })
-    data = resp.json()
-    if "access_token" in data:
-        print("🔄 TikTok token yenilendi.")
-        tg("🔄 <b>TikTok token yenilendi.</b>")
-        return data["access_token"]
-
-    print(f"⚠️  Token yenilenemedi: {data} — mevcut token deneniyor.")
-    return ACCESS_TOKEN
-
-
-def upload_to_tiktok(video_path: str, caption: str) -> bool:
-    if not ACCESS_TOKEN:
-        print("⚠️  TIKTOK_ACCESS_TOKEN bulunamadı — TikTok atlanıyor.")
+def upload_to_tiktok(video_path: str, caption: str, access_token: str) -> bool:
+    if not access_token:
+        print("⚠️  TikTok access token yok — atlanıyor.")
         return False
 
-    token = _get_token()
+    token = access_token
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type":  "application/json; charset=UTF-8",

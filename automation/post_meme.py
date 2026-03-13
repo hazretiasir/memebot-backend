@@ -27,9 +27,13 @@ AWS_SECRET_ACCESS_KEY= os.environ["AWS_SECRET_ACCESS_KEY"]
 AWS_REGION           = os.environ.get("AWS_REGION", "eu-central-1")
 S3_BUCKET            = os.environ["S3_BUCKET_NAME"]
 
-INSTAGRAM_USER_ID    = os.environ.get("INSTAGRAM_USER_ID", "")
+INSTAGRAM_USER_ID      = os.environ.get("INSTAGRAM_USER_ID", "")
 INSTAGRAM_ACCESS_TOKEN = os.environ.get("INSTAGRAM_ACCESS_TOKEN", "")
-TIKTOK_ONLY          = os.environ.get("TIKTOK_ONLY", "").lower() == "true"
+TIKTOK_CLIENT_KEY      = os.environ.get("TIKTOK_CLIENT_KEY", "")
+TIKTOK_CLIENT_SECRET   = os.environ.get("TIKTOK_CLIENT_SECRET", "")
+TIKTOK_ACCESS_TOKEN    = os.environ.get("TIKTOK_ACCESS_TOKEN", "")
+TIKTOK_REFRESH_TOKEN   = os.environ.get("TIKTOK_REFRESH_TOKEN", "")
+TIKTOK_ONLY            = os.environ.get("TIKTOK_ONLY", "").lower() == "true"
 
 # ── Instagram Token Yönetimi ──────────────────────────────────────────────────
 
@@ -80,6 +84,63 @@ def get_instagram_token(db) -> str:
             )
 
     return token
+
+
+# ── TikTok Token Yönetimi ─────────────────────────────────────────────────────
+
+def get_tiktok_token(db) -> str:
+    """
+    Access token'ı refresh token ile yeniler.
+    Güncel refresh + access token'ı MongoDB'ye kaydeder.
+    """
+    cfg = db["config"]
+
+    # Önce MongoDB'den oku, yoksa env var kullan
+    doc = cfg.find_one({"key": "tiktok_refresh_token"})
+    refresh_token = doc["value"] if doc else TIKTOK_REFRESH_TOKEN
+
+    if not refresh_token:
+        return TIKTOK_ACCESS_TOKEN
+
+    resp = requests.post(
+        "https://open.tiktokapis.com/v2/oauth/token/",
+        data={
+            "client_key":    TIKTOK_CLIENT_KEY,
+            "client_secret": TIKTOK_CLIENT_SECRET,
+            "grant_type":    "refresh_token",
+            "refresh_token": refresh_token,
+        },
+        timeout=15,
+    )
+    data = resp.json()
+
+    if "access_token" in data:
+        new_access  = data["access_token"]
+        new_refresh = data.get("refresh_token", refresh_token)
+        now = datetime.now(timezone.utc)
+
+        # Access token'ı kaydet
+        cfg.update_one(
+            {"key": "tiktok_access_token"},
+            {"$set": {"value": new_access, "refreshed_at": now}},
+            upsert=True,
+        )
+        # Refresh token'ı kaydet (değiştiyse)
+        cfg.update_one(
+            {"key": "tiktok_refresh_token"},
+            {"$set": {"value": new_refresh, "refreshed_at": now}},
+            upsert=True,
+        )
+        print("🔄 TikTok token yenilendi ve MongoDB'ye kaydedildi.")
+        tg("🔄 <b>TikTok token yenilendi.</b>")
+        return new_access
+
+    print(f"⚠️  TikTok token yenilenemedi: {data}")
+    tg(f"⚠️ <b>TikTok token yenilenemedi!</b>\n<code>{data}</code>")
+    # Fallback: MongoDB'deki access token'ı dene
+    acc_doc = cfg.find_one({"key": "tiktok_access_token"})
+    return acc_doc["value"] if acc_doc else TIKTOK_ACCESS_TOKEN
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -241,6 +302,9 @@ def main():
     # Instagram token — MongoDB'den al, gerekirse yenile
     ig_token = get_instagram_token(db)
 
+    # TikTok token — MongoDB'den al, refresh et, kaydet
+    tt_token = get_tiktok_token(db)
+
     # S3
     s3 = boto3.client(
         "s3",
@@ -277,7 +341,7 @@ def main():
     try:
         print(f"⬇️  TikTok için video indiriliyor ({s3_key})...")
         s3.download_file(S3_BUCKET, s3_key, tmp_path)
-        if upload_to_tiktok(tmp_path, caption):
+        if upload_to_tiktok(tmp_path, caption, tt_token):
             posted_platforms.append("tiktok")
     finally:
         if os.path.exists(tmp_path):

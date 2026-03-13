@@ -127,6 +127,38 @@ async function cmdScraper() {
     tg('🕵️ <b>Scraper</b> workflow tetiklendi — çalışmaya başlıyor.');
 }
 
+async function cmdTokens() {
+    const cfg = require('mongoose').connection.db.collection('config');
+
+    const igDoc = await cfg.findOne({ key: 'instagram_access_token' });
+    const ttDoc = await cfg.findOne({ key: 'tiktok_refresh_token' });
+
+    // Instagram
+    let igLine;
+    if (igDoc?.refreshed_at) {
+        const ageDays = Math.floor((Date.now() - new Date(igDoc.refreshed_at)) / 86400000);
+        const nextDays = 45 - ageDays;
+        const emoji = nextDays <= 5 ? '🔴' : nextDays <= 15 ? '🟡' : '🟢';
+        igLine = `${emoji} <b>Instagram:</b> ${ageDays} gün önce yenilendi, ${nextDays} gün kaldı`;
+    } else {
+        igLine = `⚪ <b>Instagram:</b> MongoDB'de kayıt yok`;
+    }
+
+    // TikTok
+    let ttLine;
+    if (ttDoc?.refreshed_at) {
+        const ageDays = Math.floor((Date.now() - new Date(ttDoc.refreshed_at)) / 86400000);
+        ttLine = `🟢 <b>TikTok:</b> ${ageDays} gün önce yenilendi (MongoDB'de kayıtlı)`;
+    } else {
+        ttLine = `⚪ <b>TikTok:</b> henüz MongoDB'ye kaydedilmedi (ilk paylaşımda kaydedilecek)`;
+    }
+
+    // Twitter
+    const twLine = `⚪ <b>Twitter X_AUTH_TOKEN:</b> manuel kontrol gerekli`;
+
+    tg(`🔑 <b>Token Durumları</b>\n\n${igLine}\n${ttLine}\n${twLine}`);
+}
+
 function cmdYardim() {
     tg(
         `🤖 <b>MemeBot Komutları</b>\n\n` +
@@ -138,7 +170,8 @@ function cmdYardim() {
         `/son — son paylaşılan video\n\n` +
         `<b>Kontrol</b>\n` +
         `/post — hemen video paylaştır\n` +
-        `/scraper — scraper'ı başlat`
+        `/scraper — scraper'ı başlat\n` +
+        `/tokens — token durumları`
     );
 }
 
@@ -161,6 +194,7 @@ router.post('/webhook', async (req, res) => {
         else if (cmd === '/son')     await cmdSon();
         else if (cmd === '/post')    await cmdPost();
         else if (cmd === '/scraper') await cmdScraper();
+        else if (cmd === '/tokens')  await cmdTokens();
         else if (cmd === '/yardim' || cmd === '/start') cmdYardim();
     } catch (err) {
         tg(`❌ Komut hatası (<code>${cmd}</code>):\n<code>${err.message}</code>`);

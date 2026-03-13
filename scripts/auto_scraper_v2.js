@@ -322,11 +322,20 @@ async function runAutomation() {
     await browser.close();
     console.log('\n🚀 BÜTÜN HESAPLAR İÇİN OTOMASYON GÖREVİ TAMAMLANDI!');
     updateProgress('completed', 'Tüm görevler başarıyla tamamlandı!', 100);
-    await tg(
-        `✅ <b>Scraper tamamlandı</b>\n\n` +
-        accountSummary.join('\n') +
-        `\n\n📦 Toplam yeni video: <b>${totalUploaded}</b>`
-    );
+    const allZero = accountSummary.every(s => s.includes('0 yeni video') || s.includes('hata'));
+    if (allZero) {
+        await tg(
+            `⚠️ <b>Scraper tamamlandı ama hiç video yüklenmedi!</b>\n\n` +
+            accountSummary.join('\n') +
+            `\n\n🔑 Twitter <code>X_AUTH_TOKEN</code> süresi dolmuş olabilir — manuel güncelleme gerekebilir.`
+        );
+    } else {
+        await tg(
+            `✅ <b>Scraper tamamlandı</b>\n\n` +
+            accountSummary.join('\n') +
+            `\n\n📦 Toplam yeni video: <b>${totalUploaded}</b>`
+        );
+    }
 }
 
 if (require.main === module) {
