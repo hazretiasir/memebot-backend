@@ -17,6 +17,7 @@ const MAX_VIDEOS_PER_ACCOUNT = 50;
 
 // Fallback: hardcoded token (MongoDB'de kayıt yoksa kullanılır)
 const X_AUTH_TOKEN_FALLBACK = 'aa296debbaae4e6f19c6b2a177616a2e4875d587';
+let X_AUTH_TOKEN = X_AUTH_TOKEN_FALLBACK; // runAutomation'da MongoDB'den güncellenir
 const STATUS_FILE = path.join(__dirname, '..', 'scraper_status.json');
 
 async function getTwitterToken() {
@@ -270,7 +271,7 @@ async function runAutomation() {
     updateProgress('running', `Avcı Başlatıldı, Bağlantı Kuruluyor...`, 0);
     await tg(`🕵️ <b>Scraper başladı</b>\nHedefler: ${TARGET_ACCOUNTS.map(a => '@' + a).join(', ')}`);
 
-    const X_AUTH_TOKEN = await getTwitterToken();
+    X_AUTH_TOKEN = await getTwitterToken();
 
     // 30 saniye içinde başlamazsa hata yaz
     let browser;
