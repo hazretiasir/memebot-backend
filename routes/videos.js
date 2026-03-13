@@ -78,7 +78,7 @@ router.post('/upload', upload.single('video'), async (req, res) => {
         return res.status(400).json({ error: 'No video file provided' });
     }
 
-    const { title, tags, uploadedBy, tweetUrl } = req.body;
+    const { title, tags, uploadedBy, tweetUrl, sourceLikes, sourceViews } = req.body;
     if (!title) {
         return res.status(400).json({ error: 'Title is required' });
     }
@@ -115,6 +115,8 @@ router.post('/upload', upload.single('video'), async (req, res) => {
             s3Url,
             uploadedBy: uploadedBy || 'anonymous',
             tweetUrl: tweetUrl || null,
+            likes:     parseInt(sourceLikes) || 0,
+            viewCount: parseInt(sourceViews) || 0,
         });
 
         await video.save();
@@ -220,12 +222,14 @@ router.get('/suggestions', async (req, res) => {
                 .select('title')
                 .sort({ relevanceScore: -1 })
                 .limit(5)
+                .allowDiskUse(true)
                 .lean(),
             // Tags that contain the query (from popular videos)
             Video.find({ tags: { $elemMatch: { $regex: escaped, $options: 'i' } } })
                 .select('tags')
                 .sort({ relevanceScore: -1 })
                 .limit(8)
+                .allowDiskUse(true)
                 .lean(),
         ]);
 
@@ -381,7 +385,7 @@ router.get('/search', async (req, res) => {
             const textResults = await Video.find(
                 { $text: { $search: term } },
                 { score: { $meta: 'textScore' } }
-            ).sort({ score: { $meta: 'textScore' }, relevanceScore: -1 }).limit(50);
+            ).sort({ score: { $meta: 'textScore' }, relevanceScore: -1 }).limit(50).allowDiskUse(true);
 
             if (textResults.length > 0) return textResults;
 
@@ -395,7 +399,7 @@ router.get('/search', async (req, res) => {
                     { transcript: { $in: regexes } },
                     { searchText: { $in: regexes } },
                 ],
-            }).sort({ relevanceScore: -1, createdAt: -1 }).limit(50);
+            }).sort({ relevanceScore: -1, createdAt: -1 }).limit(50).allowDiskUse(true);
         });
 
         const allKeywordResults = await Promise.all(searchPromises);
@@ -437,7 +441,8 @@ router.get('/search', async (req, res) => {
                 ...(excludeArray.length > 0 ? { _id: { $nin: excludeArray } } : {})
             })
                 .sort({ relevanceScore: -1, likes: -1 })
-                .limit(50);
+                .limit(50)
+                .allowDiskUse(true);
         }
 
         // Paginate results in memory

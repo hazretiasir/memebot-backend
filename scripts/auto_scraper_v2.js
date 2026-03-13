@@ -206,13 +206,17 @@ async function downloadAndUpload(targetAccount, tweetUrls, baseProgress) {
                 continue;
             }
 
-            console.log(`⬆️ Sisteme API Yüklemesi Başlıyor... Başlık: "${description.substring(0, 40)}..."`);
+            const sourceLikes = meta.like_count || 0;
+            const sourceViews = meta.view_count || 0;
+            console.log(`⬆️ Sisteme API Yüklemesi Başlıyor... Başlık: "${description.substring(0, 40)}..." | 👍 ${sourceLikes} ❤️ ${sourceViews}`);
             updateProgress('running', `@${targetAccount} Sunucuya Yükleniyor (${i + 1}/${urlsToProcess.length})`, currentProgress + 1);
             const formData = new FormData();
             formData.append('video', fs.createReadStream(tempFilePath));
             formData.append('title', description);
             formData.append('tags', `meme,X,arşiv,${targetAccount}`);
             formData.append('uploadedBy', `automation_bot_${targetAccount}`);
+            formData.append('sourceLikes', sourceLikes);
+            formData.append('sourceViews', sourceViews);
             formData.append('tweetUrl', url);
 
             const response = await axios.post(UPLOAD_URL, formData, {
