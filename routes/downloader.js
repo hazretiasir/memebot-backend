@@ -133,11 +133,16 @@ router.post('/download', async (req, res) => {
     } catch (err) {
         console.error('[Downloader] ❌ Error details:', err.stderr || err.message);
 
-        let userMessage = 'Video bilgileri alınamadı (API Hatası)';
-        if (err.message.includes('403') || (err.stderr && err.stderr.includes('403'))) {
-            userMessage = 'Bu video/platform şu an erişimi engelliyor (403). Lütfen farklı bir video veya link formatı deneyin.';
-        } else if (err.message.includes('redirect') || (err.stderr && err.stderr.includes('redirect'))) {
-            userMessage = 'Video linki yönlendirme döngüsüne girdi veya artık mevcut değil.';
+        const errText = err.stderr || err.message || '';
+        let userMessage = 'Video bilgileri alınamadı.';
+        if (errText.includes('No video formats found')) {
+            userMessage = 'Bu pin bir GIF veya görsel içeriyor, indirilebilir video formatı bulunamadı.';
+        } else if (errText.includes('403')) {
+            userMessage = 'Bu içerik erişimi engelliyor (403). Farklı bir link deneyin.';
+        } else if (errText.includes('redirect')) {
+            userMessage = 'Link yönlendirme döngüsüne girdi veya artık mevcut değil.';
+        } else if (errText.includes('Private') || errText.includes('private')) {
+            userMessage = 'Bu içerik gizli, indirilemez.';
         }
 
         return res.status(500).json({
