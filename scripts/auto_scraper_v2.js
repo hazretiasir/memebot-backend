@@ -8,7 +8,7 @@ const ffmpegPath = require('ffmpeg-static');
 const { send: tg } = require('./telegram_notify');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
-const TARGET_ACCOUNTS = ['yalcdb', 'videolarsivi', 'BelalArsiv'];
+const TARGET_ACCOUNTS = ['yalcdb', 'videolarsivi', 'BelalArsiv', 'videocuefendi'];
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 const UPLOAD_URL = `${API_BASE_URL}/api/videos/upload`;
 const DELAY_BETWEEN_UPLOADS = 5000;
