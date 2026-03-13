@@ -78,19 +78,43 @@ router.post('/download', async (req, res) => {
             }
         }
 
-        let downloadUrl = info.url;
-        if (!downloadUrl && Array.isArray(info.formats) && info.formats.length > 0) {
-            const withUrls = info.formats.filter((f) => !!f.url);
-            const preferred = withUrls
-                .filter((f) => f.vcodec !== 'none' && f.acodec !== 'none')
-                .pop();
-            downloadUrl = preferred?.url ?? withUrls.pop()?.url;
+        // HLS/DASH mi yoksa direkt HTTP MP4 mü kontrol et
+        const isHlsOrDash = (f) => {
+            if (!f || !f.url) return true;
+            const proto = (f.protocol || '').toLowerCase();
+            return proto === 'hls' || proto === 'm3u8_native' || proto === 'dash' ||
+                   f.url.includes('.m3u8') || f.url.includes('/manifest.mpd');
+        };
+
+        // Önce formats[] içinden doğrudan HTTP olan MP4 URL'yi bulmaya çalış
+        let downloadUrl = null;
+        if (Array.isArray(info.formats) && info.formats.length > 0) {
+            const directFormats = info.formats.filter((f) => f.url && !isHlsOrDash(f));
+            // video+audio combined > sadece video > herhangi biri
+            const preferred =
+                directFormats.filter((f) => f.vcodec !== 'none' && f.acodec !== 'none').pop() ??
+                directFormats.filter((f) => f.vcodec !== 'none').pop() ??
+                directFormats.pop();
+            downloadUrl = preferred?.url ?? null;
         }
 
+        // formats[]'dan bulunamadıysa info.url'e bak (doğrudan HTTP ise)
+        if (!downloadUrl && info.url && !isHlsOrDash(info)) {
+            downloadUrl = info.url;
+        }
+
+        // Sadece HLS/DASH varsa → ffmpeg proxy üzerinden MP4'e çevir
         if (!downloadUrl) {
-            return res.status(422).json({
-                error: 'Bu platform için doğrudan URL çözümlenemedi. Lütfen başka bir link deneyin.',
-            });
+            if (info.url || (Array.isArray(info.formats) && info.formats.length > 0)) {
+                const protocol = req.headers['x-forwarded-proto'] || 'https';
+                const host = req.get('host');
+                downloadUrl = `${protocol}://${host}/api/downloader/proxy-video?url=${encodeURIComponent(url)}`;
+                console.log('[Downloader] HLS/DASH detected → routing through proxy-video');
+            } else {
+                return res.status(422).json({
+                    error: 'Bu platform için doğrudan URL çözümlenemedi. Lütfen başka bir link deneyin.',
+                });
+            }
         }
 
         const ext = info.ext || 'mp4';
@@ -184,6 +208,47 @@ router.get('/proxy-audio', async (req, res) => {
                 error: 'Ses indirilemedi',
                 details: err.message,
             });
+        }
+    }
+});
+
+// ─── GET /api/downloader/proxy-video ─────────────────────────────────────────
+// HLS/DASH stream olan platformlar (bazı Pinterest pinleri vb.) için:
+// yt-dlp ile indir + ffmpeg ile MP4'e çevir → client'a gönder.
+router.get('/proxy-video', async (req, res) => {
+    const { url } = req.query;
+    if (!url) return res.status(400).send('URL is required');
+
+    const tempId  = Date.now();
+    const tempDir = os.tmpdir();
+    const tempMp4 = path.join(tempDir, `MemeBot_${tempId}.mp4`);
+
+    console.log(`[Proxy Video] yt-dlp download starting: ${url.substring(0, 70)}...`);
+
+    try {
+        await youtubedl(url, {
+            output: tempMp4,
+            format: 'bestvideo+bestaudio/best',
+            mergeOutputFormat: 'mp4',
+            noWarnings: true,
+            noCheckCertificates: true,
+            ffmpegLocation: ffmpegPath,
+        });
+
+        if (!fs.existsSync(tempMp4)) {
+            return res.status(500).json({ error: 'Video dosyası oluşturulamadı.' });
+        }
+
+        console.log(`[Proxy Video] ✅ MP4 ready. Sending to client...`);
+        res.download(tempMp4, 'MemeBot_Video.mp4', (err) => {
+            if (err) console.error('[Proxy Video] Send error:', err.message);
+            try { fs.unlinkSync(tempMp4); } catch { }
+        });
+    } catch (err) {
+        console.error('[Proxy Video] ❌ yt-dlp error:', err.message);
+        try { fs.unlinkSync(tempMp4); } catch { }
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Video indirilemedi', details: err.message });
         }
     }
 });
