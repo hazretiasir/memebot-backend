@@ -1,10 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const youtubedl = require('youtube-dl-exec');
 const ffmpegPath = require('ffmpeg-static');
-const fs = require('fs');
+const fs   = require('fs');
 const path = require('path');
-const os = require('os');
+const os   = require('os');
+
+// Prefer freshly-downloaded yt-dlp binary (./bin/yt-dlp) over the bundled one.
+// The postinstall script keeps ./bin/yt-dlp up-to-date on every Render deploy.
+const localBin = path.join(__dirname, '..', 'bin', 'yt-dlp');
+const youtubedl = fs.existsSync(localBin)
+  ? require('youtube-dl-exec').create(localBin)
+  : require('youtube-dl-exec');
 
 // ─── POST /api/downloader/download ───────────────────────────────────────────
 // For VIDEO: resolves direct CDN URL via yt-dlp → Flutter downloads from CDN.
