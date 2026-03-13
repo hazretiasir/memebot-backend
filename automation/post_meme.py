@@ -179,19 +179,18 @@ def post_to_instagram(video_url: str, caption: str, token: str, thumbnail_url: s
     media_id = pub.json().get("id")
     print(f"✅ Instagram Reel published! Media ID: {media_id}")
 
-    # 4. Story — thumbnail varsa image story, yoksa atla
-    if thumbnail_url:
-        _post_instagram_story(base, token, thumbnail_url)
+    # 4. Story — videoyu hikaye olarak paylaş
+    _post_instagram_story(base, token, video_url)
 
     return True
 
 
-def _post_instagram_story(base: str, token: str, thumbnail_url: str):
-    """Thumbnail ile Instagram Story paylaşır."""
+def _post_instagram_story(base: str, token: str, video_url: str):
+    """Video ile Instagram Story paylaşır."""
     print("📖 Instagram Story paylaşılıyor...")
     r = requests.post(f"{base}/media", data={
         "media_type":   "STORIES",
-        "image_url":    thumbnail_url,
+        "video_url":    video_url,
         "access_token": token,
     }, timeout=30)
 
@@ -200,7 +199,22 @@ def _post_instagram_story(base: str, token: str, thumbnail_url: str):
         return
 
     story_id = r.json().get("id")
-    time.sleep(3)
+
+    # Video işlenmesini bekle (max ~2 dk)
+    print("⏳ Story işleniyor...")
+    for attempt in range(12):
+        time.sleep(10)
+        s = requests.get(
+            f"https://graph.facebook.com/v18.0/{story_id}",
+            params={"fields": "status_code", "access_token": token},
+            timeout=15,
+        ).json().get("status_code", "UNKNOWN")
+        print(f"   [{attempt+1}/12] status: {s}")
+        if s == "FINISHED":
+            break
+        if s == "ERROR":
+            print("⚠️  Story işleme hatası.")
+            return
 
     pub = requests.post(f"{base}/media_publish", data={
         "creation_id":  story_id,
