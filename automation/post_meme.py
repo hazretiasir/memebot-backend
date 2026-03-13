@@ -179,9 +179,6 @@ def post_to_instagram(video_url: str, caption: str, token: str, thumbnail_url: s
     media_id = pub.json().get("id")
     print(f"✅ Instagram Reel published! Media ID: {media_id}")
 
-    # 4. Story — videoyu hikaye olarak paylaş
-    _post_instagram_story(base, token, video_url)
-
     return True
 
 
