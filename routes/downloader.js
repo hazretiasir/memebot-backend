@@ -33,12 +33,35 @@ router.post('/download', async (req, res) => {
         }
 
         // ── VIDEO: resolve direct CDN URL ─────────────────────────────────────
-        const info = await youtubedl(url, {
+        const baseOpts = {
             dumpSingleJson: true,
             noWarnings: true,
             noCheckCertificates: true,
-            format: 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-        });
+            impersonate: 'chrome',
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            addHeader: [
+                'Referer:https://www.tiktok.com/',
+                'Accept-Language:tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+            ],
+        };
+
+        let info;
+        try {
+            info = await youtubedl(url, {
+                ...baseOpts,
+                format: 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=mp4]/best',
+            });
+        } catch (firstErr) {
+            // Pinterest ve bazı platformlar ext kısıtlı format stringiyle başarısız olabiliyor.
+            // "Requested format is not available" hatasında ext kısıtlaması olmadan tekrar dene.
+            const errText = firstErr.stderr || firstErr.message || '';
+            if (errText.includes('Requested format is not available')) {
+                console.log('[Downloader] Format not found, retrying with "best"...');
+                info = await youtubedl(url, { ...baseOpts, format: 'best' });
+            } else {
+                throw firstErr;
+            }
+        }
 
         let downloadUrl = info.url;
         if (!downloadUrl && Array.isArray(info.formats) && info.formats.length > 0) {
@@ -69,11 +92,19 @@ router.post('/download', async (req, res) => {
             referer: info.webpage_url ?? url,
         });
     } catch (err) {
-        console.error('[Downloader] ❌ Error:', err.message);
+        console.error('[Downloader] ❌ Error details:', err.stderr || err.message);
+
+        let userMessage = 'Video bilgileri alınamadı (API Hatası)';
+        if (err.message.includes('403') || (err.stderr && err.stderr.includes('403'))) {
+            userMessage = 'Bu video/platform şu an erişimi engelliyor (403). Lütfen farklı bir video veya link formatı deneyin.';
+        } else if (err.message.includes('redirect') || (err.stderr && err.stderr.includes('redirect'))) {
+            userMessage = 'Video linki yönlendirme döngüsüne girdi veya artık mevcut değil.';
+        }
+
         return res.status(500).json({
-            error: 'Video bilgileri alınamadı (API Hatası)',
-            details: err.message,
-            tip: 'Linkin doğruluğunu kontrol edin veya sunucuyu yeniden başlatın.',
+            error: userMessage,
+            details: err.stderr || err.message,
+            tip: 'TikTok profil linki yerine doğrudan video linki kullanmayı deneyin.',
         });
     }
 });
@@ -87,11 +118,11 @@ router.get('/proxy-audio', async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).send('URL is required');
 
-    const tempId   = Date.now();
-    const tempDir  = os.tmpdir();
+    const tempId = Date.now();
+    const tempDir = os.tmpdir();
     // yt-dlp will produce: tempBase.mp3  (after --extract-audio --audio-format mp3)
     const tempBase = path.join(tempDir, `MemeBot_${tempId}`);
-    const tempMp3  = `${tempBase}.mp3`;
+    const tempMp3 = `${tempBase}.mp3`;
 
     console.log(`[Proxy Audio] yt-dlp download starting: ${url.substring(0, 70)}...`);
 
@@ -123,7 +154,7 @@ router.get('/proxy-audio', async (req, res) => {
             // Clean up temp file and any intermediate files yt-dlp left behind
             fs.readdirSync(tempDir)
                 .filter(f => f.startsWith(`MemeBot_${tempId}`))
-                .forEach(f => { try { fs.unlinkSync(path.join(tempDir, f)); } catch {} });
+                .forEach(f => { try { fs.unlinkSync(path.join(tempDir, f)); } catch { } });
         });
 
     } catch (err) {
@@ -131,7 +162,7 @@ router.get('/proxy-audio', async (req, res) => {
         // Cleanup on error
         fs.readdirSync(tempDir)
             .filter(f => f.startsWith(`MemeBot_${tempId}`))
-            .forEach(f => { try { fs.unlinkSync(path.join(tempDir, f)); } catch {} });
+            .forEach(f => { try { fs.unlinkSync(path.join(tempDir, f)); } catch { } });
 
         if (!res.headersSent) {
             res.status(500).json({
