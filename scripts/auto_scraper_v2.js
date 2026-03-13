@@ -5,6 +5,7 @@ const path = require('path');
 const axios = require('axios');
 const FormData = require('form-data');
 const ffmpegPath = require('ffmpeg-static');
+const mongoose = require('mongoose');
 const { send: tg } = require('./telegram_notify');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
@@ -14,9 +15,26 @@ const UPLOAD_URL = `${API_BASE_URL}/api/videos/upload`;
 const DELAY_BETWEEN_UPLOADS = 5000;
 const MAX_VIDEOS_PER_ACCOUNT = 50;
 
-// Hardcoded X_AUTH_TOKEN from previous working version
-const X_AUTH_TOKEN = 'aa296debbaae4e6f19c6b2a177616a2e4875d587';
+// Fallback: hardcoded token (MongoDB'de kayıt yoksa kullanılır)
+const X_AUTH_TOKEN_FALLBACK = 'aa296debbaae4e6f19c6b2a177616a2e4875d587';
 const STATUS_FILE = path.join(__dirname, '..', 'scraper_status.json');
+
+async function getTwitterToken() {
+    try {
+        if (!process.env.MONGODB_URI) return X_AUTH_TOKEN_FALLBACK;
+        await mongoose.connect(process.env.MONGODB_URI);
+        const cfg = mongoose.connection.db.collection('config');
+        const doc = await cfg.findOne({ key: 'twitter_auth_token' });
+        await mongoose.disconnect();
+        if (doc?.value) {
+            console.log('🔑 Twitter token MongoDB\'den alındı.');
+            return doc.value;
+        }
+    } catch (e) {
+        console.log('⚠️  MongoDB\'den token alınamadı, fallback kullanılıyor.');
+    }
+    return X_AUTH_TOKEN_FALLBACK;
+}
 
 function updateProgress(status, stageText, progress) {
     try {
@@ -251,6 +269,8 @@ async function runAutomation() {
 
     updateProgress('running', `Avcı Başlatıldı, Bağlantı Kuruluyor...`, 0);
     await tg(`🕵️ <b>Scraper başladı</b>\nHedefler: ${TARGET_ACCOUNTS.map(a => '@' + a).join(', ')}`);
+
+    const X_AUTH_TOKEN = await getTwitterToken();
 
     // 30 saniye içinde başlamazsa hata yaz
     let browser;

@@ -127,11 +127,49 @@ async function cmdScraper() {
     tg('🕵️ <b>Scraper</b> workflow tetiklendi — çalışmaya başlıyor.');
 }
 
+async function cmdSetToken(args) {
+    const parts = args.trim().split(/\s+/);
+    if (parts.length < 2) {
+        tg(
+            '❌ Eksik parametre.\n\nKullanım:\n' +
+            '<code>/settoken twitter TOKEN</code>\n' +
+            '<code>/settoken tiktok_refresh TOKEN</code>\n' +
+            '<code>/settoken instagram TOKEN</code>'
+        );
+        return;
+    }
+
+    const type  = parts[0].toLowerCase();
+    const value = parts[1];
+
+    const keyMap = {
+        twitter:        'twitter_auth_token',
+        tiktok_refresh: 'tiktok_refresh_token',
+        instagram:      'instagram_access_token',
+    };
+
+    const key = keyMap[type];
+    if (!key) {
+        tg(`❌ Geçersiz token tipi: <code>${type}</code>\nGeçerliler: twitter, tiktok_refresh, instagram`);
+        return;
+    }
+
+    const cfg = require('mongoose').connection.db.collection('config');
+    await cfg.updateOne(
+        { key },
+        { $set: { key, value, refreshed_at: new Date() } },
+        { upsert: true }
+    );
+
+    tg(`✅ <b>${type}</b> token MongoDB'ye kaydedildi.\n\n⚠️ Bu mesajı şimdi sil!`);
+}
+
 async function cmdTokens() {
     const cfg = require('mongoose').connection.db.collection('config');
 
     const igDoc = await cfg.findOne({ key: 'instagram_access_token' });
     const ttDoc = await cfg.findOne({ key: 'tiktok_refresh_token' });
+    const twDoc = await cfg.findOne({ key: 'twitter_auth_token' });
 
     // Instagram
     let igLine;
@@ -154,9 +192,15 @@ async function cmdTokens() {
     }
 
     // Twitter
-    const twLine = `⚪ <b>Twitter X_AUTH_TOKEN:</b> manuel kontrol gerekli`;
+    let twLine;
+    if (twDoc?.refreshed_at) {
+        const ageDays = Math.floor((Date.now() - new Date(twDoc.refreshed_at)) / 86400000);
+        twLine = `🟢 <b>Twitter:</b> ${ageDays} gün önce güncellendi (MongoDB'de kayıtlı)`;
+    } else {
+        twLine = `⚪ <b>Twitter:</b> MongoDB'de kayıt yok (hardcoded fallback kullanılıyor)`;
+    }
 
-    tg(`🔑 <b>Token Durumları</b>\n\n${igLine}\n${ttLine}\n${twLine}`);
+    tg(`🔑 <b>Token Durumları</b>\n\n${igLine}\n${ttLine}\n${twLine}\n\n💡 Güncellemek için:\n<code>/settoken twitter TOKEN</code>`);
 }
 
 function cmdYardim() {
@@ -171,7 +215,8 @@ function cmdYardim() {
         `<b>Kontrol</b>\n` +
         `/post — hemen video paylaştır\n` +
         `/scraper — scraper'ı başlat\n` +
-        `/tokens — token durumları`
+        `/tokens — token durumları\n` +
+        `/settoken [twitter|tiktok_refresh|instagram] TOKEN`
     );
 }
 
@@ -194,7 +239,8 @@ router.post('/webhook', async (req, res) => {
         else if (cmd === '/son')     await cmdSon();
         else if (cmd === '/post')    await cmdPost();
         else if (cmd === '/scraper') await cmdScraper();
-        else if (cmd === '/tokens')  await cmdTokens();
+        else if (cmd === '/tokens')   await cmdTokens();
+        else if (cmd === '/settoken') await cmdSetToken((message.text || '').slice('/settoken'.length));
         else if (cmd === '/yardim' || cmd === '/start') cmdYardim();
     } catch (err) {
         tg(`❌ Komut hatası (<code>${cmd}</code>):\n<code>${err.message}</code>`);
