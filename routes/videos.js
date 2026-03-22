@@ -483,9 +483,9 @@ router.get('/search', async (req, res) => {
 
 // ─── POST /api/videos/:id/feedback ───────────────────────────────────────────
 router.post('/:id/feedback', async (req, res) => {
-    const { type } = req.body; // "like" | "dislike" | "search_upvote" | "search_downvote"
+    const { type } = req.body; // "like" | "search_upvote" | "search_downvote"
 
-    if (!['like', 'dislike', 'search_upvote', 'search_downvote'].includes(type)) {
+    if (!['like', 'search_upvote', 'search_downvote'].includes(type)) {
         return res.status(400).json({ error: 'invalid type string' });
     }
 
@@ -495,8 +495,7 @@ router.post('/:id/feedback', async (req, res) => {
 
         if (type === 'like') {
             video.likes += 1;
-        } else if (type === 'dislike') {
-            video.dislikes += 1;
+            video.recalculateScore();
         } else if (type === 'search_upvote') {
             video.searchUpvotes += 1;
             video.recalculateScore();
@@ -510,13 +509,24 @@ router.post('/:id/feedback', async (req, res) => {
         res.json({
             message: 'Feedback recorded',
             likes: video.likes,
-            dislikes: video.dislikes,
             relevanceScore: video.relevanceScore,
         });
     } catch (err) {
         console.error('Feedback error:', err);
         res.status(500).json({ error: 'Feedback failed', details: err.message });
     }
+});
+
+// ─── POST /api/videos/:id/view ────────────────────────────────────────────────
+router.post('/:id/view', async (req, res) => {
+    res.sendStatus(204); // Hemen dön, kullanıcıyı beklettirme
+    try {
+        const video = await Video.findById(req.params.id);
+        if (!video) return;
+        video.viewCount += 1;
+        video.recalculateScore();
+        await video.save();
+    } catch (_) { /* ignore */ }
 });
 
 // ─── POST /api/videos/:id/download ───────────────────────────────────────────
@@ -602,8 +612,7 @@ router.post('/feed', async (req, res) => {
                             1, // Base puan
                             "$likes",
                             { $multiply: ["$downloadCount", 2] },
-                            { $multiply: ["$relevanceScore", 0.5] },
-                            { $subtract: [0, "$dislikes"] }
+                            { $multiply: ["$relevanceScore", 0.5] }
                         ]
                     },
                     randomWeight: { $rand: {} } // 0.0 to 1.0 arası şans faktörü

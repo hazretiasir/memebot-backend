@@ -38,10 +38,6 @@ const videoSchema = new mongoose.Schema({
         type: Number,
         default: 0,
     },
-    dislikes: {
-        type: Number,
-        default: 0,
-    },
     searchUpvotes: {
         type: Number,
         default: 0,
@@ -108,7 +104,7 @@ videoSchema.index({ title: 'text', description: 'text', tags: 'text', transcript
 //   3. Time decay    — recently uploaded videos get a mild initial boost
 videoSchema.methods.recalculateScore = function () {
     // 0. Logical Enforcer: A video must have been viewed at least as many times as it was interacted with
-    const totalInteractions = this.likes + this.dislikes + this.searchUpvotes + this.searchDownvotes;
+    const totalInteractions = this.likes + this.searchUpvotes + this.searchDownvotes;
     if (this.viewCount < totalInteractions) {
         this.viewCount = totalInteractions;
     }
