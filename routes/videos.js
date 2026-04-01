@@ -602,6 +602,10 @@ router.post('/feed', async (req, res) => {
         // 2. Akıllı Pipeline (Smart Aggregation)
         // Kalanlardan rastgele 100 tane alır, izlenme ve skorları harmanlayıp en iyileri çeker.
         // Bu sayede hem çok popülerler hem de hiç izlenmemiş "hidden gem"ler akışa dengeli düşer.
+        const now = new Date();
+        const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+        const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+
         const videos = await Video.aggregate([
             matchStage,
             { $sample: { size: 100 } }, // Havuz optimizasyonu
@@ -615,13 +619,28 @@ router.post('/feed', async (req, res) => {
                             { $multiply: ["$relevanceScore", 0.5] }
                         ]
                     },
-                    randomWeight: { $rand: {} } // 0.0 to 1.0 arası şans faktörü
+                    randomWeight: { $rand: {} }, // 0.0 to 1.0 arası şans faktörü
+                    // Yeni videolar önce çıksın: son 7 gün = 5x, son 30 gün = 2x, eski = 1x
+                    recencyBoost: {
+                        $cond: [
+                            { $gte: ["$createdAt", sevenDaysAgo] },
+                            5,
+                            { $cond: [{ $gte: ["$createdAt", thirtyDaysAgo] }, 2, 1] }
+                        ]
+                    }
                 }
             },
             {
                 $addFields: {
                     // Popüler videolar her zaman 1. sırada çıkmasın diye randomize ile çarpıyoruz
-                    finalScore: { $multiply: [{ $max: ["$engagementScore", 1] }, "$randomWeight"] }
+                    // + yeni videolar recencyBoost ile öne taşınır
+                    finalScore: {
+                        $multiply: [
+                            { $max: ["$engagementScore", 1] },
+                            "$randomWeight",
+                            "$recencyBoost"
+                        ]
+                    }
                 }
             },
             { $sort: { finalScore: -1 } },
