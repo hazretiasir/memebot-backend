@@ -621,11 +621,11 @@ router.post('/feed', async (req, res) => {
                         ]
                     },
                     randomWeight: { $rand: {} }, // 0.0 to 1.0 arası şans faktörü
-                    // Yeni videolar önce çıksın: son 24 saat = 15x, son 7 gün = 5x, son 30 gün = 2x, eski = 1x
+                    // Yeni videolar önce çıksın: son 24 saat = 1000x, son 7 gün = 5x, son 30 gün = 2x, eski = 1x
                     recencyBoost: {
                         $cond: [
                             { $gte: ["$createdAt", oneDayAgo] },
-                            15,
+                            1000,
                             {
                                 $cond: [
                                     { $gte: ["$createdAt", sevenDaysAgo] },
