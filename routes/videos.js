@@ -603,6 +603,7 @@ router.post('/feed', async (req, res) => {
         // Kalanlardan rastgele 100 tane alır, izlenme ve skorları harmanlayıp en iyileri çeker.
         // Bu sayede hem çok popülerler hem de hiç izlenmemiş "hidden gem"ler akışa dengeli düşer.
         const now = new Date();
+        const oneDayAgo = new Date(now - 24 * 60 * 60 * 1000);
         const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
         const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
 
@@ -620,12 +621,18 @@ router.post('/feed', async (req, res) => {
                         ]
                     },
                     randomWeight: { $rand: {} }, // 0.0 to 1.0 arası şans faktörü
-                    // Yeni videolar önce çıksın: son 7 gün = 5x, son 30 gün = 2x, eski = 1x
+                    // Yeni videolar önce çıksın: son 24 saat = 15x, son 7 gün = 5x, son 30 gün = 2x, eski = 1x
                     recencyBoost: {
                         $cond: [
-                            { $gte: ["$createdAt", sevenDaysAgo] },
-                            5,
-                            { $cond: [{ $gte: ["$createdAt", thirtyDaysAgo] }, 2, 1] }
+                            { $gte: ["$createdAt", oneDayAgo] },
+                            15,
+                            {
+                                $cond: [
+                                    { $gte: ["$createdAt", sevenDaysAgo] },
+                                    5,
+                                    { $cond: [{ $gte: ["$createdAt", thirtyDaysAgo] }, 2, 1] }
+                                ]
+                            }
                         ]
                     }
                 }
