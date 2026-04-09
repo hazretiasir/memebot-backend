@@ -62,6 +62,10 @@ const videoSchema = new mongoose.Schema({
         type: Date,
         default: Date.now,
     },
+    isApproved: {
+        type: Boolean,
+        default: true,
+    },
     // 768-dimensional vector from Gemini text-embedding-004
     // Used for semantic / vector search via Atlas $vectorSearch
     embedding: {

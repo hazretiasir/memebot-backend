@@ -14,6 +14,7 @@ const Video = require('../models/Video');
 const SearchLog = require('../models/SearchLog');
 const { generateAndUploadThumbnail } = require('../utils/thumbnail');
 const { expandQuery, generateEmbedding, generateTags, generateVideoDescription, generateTranscript } = require('../utils/gemini');
+const { send: tg } = require('../utils/telegram_notify');
 
 
 
@@ -115,9 +116,22 @@ router.post('/upload', upload.single('video'), async (req, res) => {
             s3Url,
             uploadedBy: uploadedBy || 'anonymous',
             tweetUrl: tweetUrl || null,
+            isApproved: false,
         });
 
         await video.save();
+
+        // ── Telegram Moderasyon Bildirimi ──────
+        const tgMessage = `🚀 <b>Yeni Video (Onay Bekliyor)</b>\n\n📌 Başlık: <b>${title}</b>\n👤 Yükleyen: <b>${uploadedBy || 'anonymous'}</b>\n\nBu videoyu onaylayıp uygulamanın keşfetine düşürmek veya reddedip AWS'den silmek için aşağıdaki butonları kullanın.\n\n🔗 <a href="${s3Url}">Videoyu İzle</a>`;
+        const tgMarkup = {
+            inline_keyboard: [
+                [
+                    { text: '✅ Onayla', callback_data: `approve_${video._id}` },
+                    { text: '❌ Reddet (Sil)', callback_data: `reject_${video._id}` }
+                ]
+            ]
+        };
+        tg(tgMessage, tgMarkup);
 
         // ── Post-processing in background (non-blocking) ──────
         const videoBuffer = req.file.buffer;
@@ -216,14 +230,14 @@ router.get('/suggestions', async (req, res) => {
     try {
         const [titleMatches, tagMatches] = await Promise.all([
             // Titles that contain the query
-            Video.find({ title: regex })
+            Video.find({ title: regex, isApproved: { $ne: false } })
                 .select('title')
                 .sort({ relevanceScore: -1 })
                 .limit(5)
                 .allowDiskUse(true)
                 .lean(),
             // Tags that contain the query (from popular videos)
-            Video.find({ tags: { $elemMatch: { $regex: escaped, $options: 'i' } } })
+            Video.find({ tags: { $elemMatch: { $regex: escaped, $options: 'i' } }, isApproved: { $ne: false } })
                 .select('tags')
                 .sort({ relevanceScore: -1 })
                 .limit(8)
@@ -337,7 +351,8 @@ router.get('/search', async (req, res) => {
                             { description: { $in: regexes } },
                             { transcript: { $in: regexes } },
                             { searchText: { $in: regexes } },
-                        ]
+                        ],
+                        isApproved: { $ne: false }
                     }).limit(10);
                     addToMap(exactMatches, 100); // 3 Kelimeyi Peş Peşe İçerenlere OLAĞANÜSTÜ BONUS!
                 } catch (err) { }
@@ -358,6 +373,7 @@ router.get('/search', async (req, res) => {
                             limit: 50,
                         },
                     },
+                    { $match: { isApproved: { $ne: false } } },
                     {
                         $project: {
                             title: 1, tags: 1, s3Key: 1, s3Url: 1,
@@ -381,7 +397,7 @@ router.get('/search', async (req, res) => {
         // We fetch up to 50 items here since we handle pagination in memory for hybridization
         const searchPromises = expandedTerms.map(async (term) => {
             const textResults = await Video.find(
-                { $text: { $search: term } },
+                { $text: { $search: term }, isApproved: { $ne: false } },
                 { score: { $meta: 'textScore' } }
             ).sort({ score: { $meta: 'textScore' }, relevanceScore: -1 }).limit(50).allowDiskUse(true);
 
@@ -397,6 +413,7 @@ router.get('/search', async (req, res) => {
                     { transcript: { $in: regexes } },
                     { searchText: { $in: regexes } },
                 ],
+                isApproved: { $ne: false }
             }).sort({ relevanceScore: -1, createdAt: -1 }).limit(50).allowDiskUse(true);
         });
 
@@ -436,7 +453,8 @@ router.get('/search', async (req, res) => {
         // ── 4. Still nothing? Fall back to most popular ───────────────────────
         if (allRankedVideos.length === 0) {
             allRankedVideos = await Video.find({
-                ...(excludeArray.length > 0 ? { _id: { $nin: excludeArray } } : {})
+                ...(excludeArray.length > 0 ? { _id: { $nin: excludeArray } } : {}),
+                isApproved: { $ne: false }
             })
                 .sort({ relevanceScore: -1, likes: -1 })
                 .limit(50)
@@ -595,7 +613,8 @@ router.post('/feed', async (req, res) => {
 
         const matchStage = {
             $match: {
-                _id: { $nin: objectIdSeenIds }
+                _id: { $nin: objectIdSeenIds },
+                isApproved: { $ne: false }
             }
         };
 
@@ -693,7 +712,7 @@ router.post('/batch', async (req, res) => {
 // ─── GET /api/videos/count ───────────────────────────────────────────────────
 router.get('/count', async (req, res) => {
     try {
-        const count = await Video.countDocuments();
+        const count = await Video.countDocuments({ isApproved: { $ne: false } });
         res.json({ count });
     } catch (err) {
         res.status(500).json({ error: 'Failed to get count' });
@@ -717,8 +736,8 @@ router.get('/', async (req, res) => {
         const maxLimit = Math.min(parseInt(limit), 5000);
 
         const [videos, total] = await Promise.all([
-            Video.find().sort(sortObj).skip(skip).limit(maxLimit).allowDiskUse(true),
-            Video.countDocuments(),
+            Video.find({ isApproved: { $ne: false } }).sort(sortObj).skip(skip).limit(maxLimit).allowDiskUse(true),
+            Video.countDocuments({ isApproved: { $ne: false } }),
         ]);
 
         res.json({

@@ -8,9 +8,11 @@ const https = require('https');
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const CHAT_ID   = process.env.TELEGRAM_CHAT_ID   || '';
 
-function send(message) {
+function send(message, reply_markup = null) {
     if (!BOT_TOKEN || !CHAT_ID) return;
-    const body = JSON.stringify({ chat_id: CHAT_ID, text: message, parse_mode: 'HTML' });
+    const payload = { chat_id: CHAT_ID, text: message, parse_mode: 'HTML' };
+    if (reply_markup) payload.reply_markup = reply_markup;
+    const body = JSON.stringify(payload);
     const req = https.request({
         hostname: 'api.telegram.org',
         path: `/bot${BOT_TOKEN}/sendMessage`,

@@ -26,6 +26,23 @@ async function triggerWorkflow(workflowFile, inputs = {}) {
     );
 }
 
+// ── Telegram Yardımcıları ──────────────────────────────────────────────────────
+
+async function editTelegramMessage(chatId, messageId, newText) {
+    const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+    if (!BOT_TOKEN) return;
+    try {
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
+            chat_id: chatId,
+            message_id: messageId,
+            text: newText,
+            parse_mode: 'HTML'
+        });
+    } catch(err) {
+        console.error('Telegram editMessage hatası:', err.message);
+    }
+}
+
 // ── Komut işleyiciler ──────────────────────────────────────────────────────────
 
 async function cmdStatus() {
@@ -224,6 +241,43 @@ function cmdYardim() {
 
 router.post('/webhook', async (req, res) => {
     res.sendStatus(200); // Telegram'a hemen 200 dön
+
+    // ─── CALLBACK QUERY (Buton Tıklamaları - Moderasyon) ──────────────────────────
+    if (req.body?.callback_query) {
+        const cb = req.body.callback_query;
+        if (!authorized(cb.message?.chat?.id)) return;
+        
+        const data = cb.data; // e.g. "approve_123" veya "reject_123"
+        const chatId = cb.message.chat.id;
+        const msgId = cb.message.message_id;
+
+        try {
+            if (data.startsWith('approve_')) {
+                const videoId = data.replace('approve_', '');
+                await Video.findByIdAndUpdate(videoId, { isApproved: true });
+                
+                const newText = `✅ <b>VİDEO ONAYLANDI</b>\n\nVideo başarıyla keşfet akışına dahil edildi ve artık tüm kullanıcılara gösteriliyor.`;
+                await editTelegramMessage(chatId, msgId, newText);
+            } 
+            else if (data.startsWith('reject_')) {
+                const videoId = data.replace('reject_', '');
+                const video = await Video.findById(videoId);
+                if (video) {
+                    const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
+                    // Delete from S3
+                    if (video.s3Key) await s3Client.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: video.s3Key })).catch(()=>{});
+                    if (video.thumbnailKey) await s3Client.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: video.thumbnailKey })).catch(()=>{});
+                    // Delete from DB
+                    await Video.findByIdAndDelete(videoId);
+                }
+                const newText = `❌ <b>VİDEO REDDEDİLDİ</b>\n\nVideo ve ona ait medyalar (thumbnail dahil) AWS S3'ten kalıcı olarak silindi.`;
+                await editTelegramMessage(chatId, msgId, newText);
+            }
+        } catch (err) {
+            console.error('Webhook callback hatası:', err);
+        }
+        return;
+    }
 
     const message = req.body?.message;
     if (!message) return;
