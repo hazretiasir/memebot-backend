@@ -122,7 +122,16 @@ router.post('/upload', upload.single('video'), async (req, res) => {
         await video.save();
 
         // ── Telegram Moderasyon Bildirimi ──────
-        const tgMessage = `🚀 <b>Yeni Video (Onay Bekliyor)</b>\n\n📌 Başlık: <b>${title}</b>\n👤 Yükleyen: <b>${uploadedBy || 'anonymous'}</b>\n\nBu videoyu onaylayıp uygulamanın keşfetine düşürmek veya reddedip AWS'den silmek için aşağıdaki butonları kullanın.\n\n🔗 <a href="${s3Url}">Videoyu İzle</a>`;
+        let previewLink = s3Url;
+        try {
+            previewLink = await getSignedUrl(
+                s3Client,
+                new GetObjectCommand({ Bucket: process.env.S3_BUCKET_NAME, Key: key }),
+                { expiresIn: 3600 * 24 } // Admin için 24 saat geçerli özel link
+            );
+        } catch (_) {}
+
+        const tgMessage = `🚀 <b>Yeni Video (Onay Bekliyor)</b>\n\n📌 Başlık: <b>${title}</b>\n👤 Yükleyen: <b>${uploadedBy || 'anonymous'}</b>\n\nBu videoyu onaylayıp uygulamanın keşfetine düşürmek veya reddedip AWS'den silmek için aşağıdaki butonları kullanın.\n\n🔗 <a href="${previewLink}">Videoyu İzle</a>`;
         const tgMarkup = {
             inline_keyboard: [
                 [
