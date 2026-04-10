@@ -8,6 +8,20 @@ const videoRoutes    = require('./routes/videos');
 const searchRoutes   = require('./routes/searches');
 const downloaderRoutes = require('./routes/downloader');
 const telegramRoutes = require('./routes/telegram');
+const notificationsRoutes = require('./routes/notifications');
+
+// Initialize Firebase Admin
+const admin = require("firebase-admin");
+const serviceAccount = require("./config/firebase-service-account.json");
+
+try {
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+    });
+    console.log('✅ Firebase Admin SDK initialized');
+} catch (error) {
+    console.error('❌ Firebase Admin initialization failed:', error.message);
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -46,6 +60,7 @@ app.use(express.static('public'));
 app.use('/api/videos', videoRoutes);
 app.use('/api/searches', searchRoutes);
 app.use('/api/downloader', downloaderRoutes);
+app.use('/api/notifications', notificationsRoutes);
 app.use('/telegram', telegramRoutes);
 
 

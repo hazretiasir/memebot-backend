@@ -7,6 +7,8 @@ const s3Client  = require('../config/aws');
 const Video     = require('../models/Video');
 const SearchLog = require('../models/SearchLog');
 const { send: tg } = require('../utils/telegram_notify');
+const admin = require('firebase-admin');
+const DeviceToken = require('../models/DeviceToken');
 
 const CHAT_ID    = process.env.TELEGRAM_CHAT_ID  || '';
 const GITHUB_PAT = process.env.GITHUB_PAT        || '';
@@ -283,7 +285,9 @@ router.post('/webhook', async (req, res) => {
     if (!message) return;
     if (!authorized(message.chat?.id)) return;
 
-    const cmd = (message.text || '').trim().split(' ')[0].toLowerCase();
+    const fullText = (message.text || '').trim();
+    const cmd = fullText.split(' ')[0].toLowerCase();
+    const args = fullText.substring(cmd.length).trim();
 
     try {
         if      (cmd === '/status')  await cmdStatus();
@@ -295,6 +299,37 @@ router.post('/webhook', async (req, res) => {
         else if (cmd === '/scraper') await cmdScraper();
         else if (cmd === '/tokens')   await cmdTokens();
         else if (cmd === '/settoken') await cmdSetToken((message.text || '').slice('/settoken'.length));
+        else if (cmd === '/duyuru') {
+            if (!args) {
+                tg('❌ Kullanım: <code>/duyuru [Mesajınız]</code>');
+                return;
+            }
+            tg(`📢 Duyuru gönderimi başlatılıyor...\nMesaj: <i>${args}</i>`);
+            try {
+                const tokens = await DeviceToken.find({}).select('token -_id').lean();
+                if (tokens.length === 0) {
+                    tg('❌ Sistemde kayıtlı cihaz tokenı bulunamadı.');
+                } else {
+                    const tokenList = tokens.map(t => t.token);
+                    
+                    // Chunk the tokens in groups of 500
+                    let success = 0, fail = 0;
+                    for (let i = 0; i < tokenList.length; i += 500) {
+                        const chunk = tokenList.slice(i, i + 500);
+                        const msgObj = {
+                            notification: { title: 'MemeBot', body: args },
+                            tokens: chunk
+                        };
+                        const response = await admin.messaging().sendEachForMulticast(msgObj);
+                        success += response.successCount;
+                        fail += response.failureCount;
+                    }
+                    tg(`✅ <b>Duyuru Tamamlandı</b>\n\n🟢 Başarılı: <b>${success}</b>\n🔴 Başarısız: <b>${fail}</b>`);
+                }
+            } catch (notifyErr) {
+                tg(`❌ Duyuru sırasında hata:\n<code>${notifyErr.message}</code>`);
+            }
+        }
         else if (cmd === '/yardim' || cmd === '/start') cmdYardim();
     } catch (err) {
         tg(`❌ Komut hatası (<code>${cmd}</code>):\n<code>${err.message}</code>`);
