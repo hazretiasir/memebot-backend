@@ -108,6 +108,8 @@ router.post('/upload', upload.single('video'), async (req, res) => {
                 : tags;
         }
 
+        const isBot = uploadedBy && uploadedBy.startsWith('automation_bot_');
+
         // Save to MongoDB
         const video = new Video({
             title,
@@ -116,31 +118,34 @@ router.post('/upload', upload.single('video'), async (req, res) => {
             s3Url,
             uploadedBy: uploadedBy || 'anonymous',
             tweetUrl: tweetUrl || null,
-            isApproved: false,
+            isApproved: isBot, // Bot yüklemeleri anında onaylı gelir, kullanıcılar false
         });
 
         await video.save();
 
         // ── Telegram Moderasyon Bildirimi ──────
-        let previewLink = s3Url;
-        try {
-            previewLink = await getSignedUrl(
-                s3Client,
-                new GetObjectCommand({ Bucket: process.env.S3_BUCKET_NAME, Key: key }),
-                { expiresIn: 3600 * 24 } // Admin için 24 saat geçerli özel link
-            );
-        } catch (_) {}
+        // Sadece kullanıcılardan gelen (onaysız) videolar için Telegram bildirimi at
+        if (!isBot) {
+            let previewLink = s3Url;
+            try {
+                previewLink = await getSignedUrl(
+                    s3Client,
+                    new GetObjectCommand({ Bucket: process.env.S3_BUCKET_NAME, Key: key }),
+                    { expiresIn: 3600 * 24 } // Admin için 24 saat geçerli özel link
+                );
+            } catch (_) {}
 
-        const tgMessage = `🚀 <b>Yeni Video (Onay Bekliyor)</b>\n\n📌 Başlık: <b>${title}</b>\n👤 Yükleyen: <b>${uploadedBy || 'anonymous'}</b>\n\nBu videoyu onaylayıp uygulamanın keşfetine düşürmek veya reddedip AWS'den silmek için aşağıdaki butonları kullanın.\n\n🔗 <a href="${previewLink}">Videoyu İzle</a>`;
-        const tgMarkup = {
-            inline_keyboard: [
-                [
-                    { text: '✅ Onayla', callback_data: `approve_${video._id}` },
-                    { text: '❌ Reddet (Sil)', callback_data: `reject_${video._id}` }
+            const tgMessage = `🚀 <b>Yeni Video (Onay Bekliyor)</b>\n\n📌 Başlık: <b>${title}</b>\n👤 Yükleyen: <b>${uploadedBy || 'anonymous'}</b>\n\nBu videoyu onaylayıp uygulamanın keşfetine düşürmek veya reddedip AWS'den silmek için aşağıdaki butonları kullanın.\n\n🔗 <a href="${previewLink}">Videoyu İzle</a>`;
+            const tgMarkup = {
+                inline_keyboard: [
+                    [
+                        { text: '✅ Onayla', callback_data: `approve_${video._id}` },
+                        { text: '❌ Reddet (Sil)', callback_data: `reject_${video._id}` }
+                    ]
                 ]
-            ]
-        };
-        tg(tgMessage, tgMarkup);
+            };
+            tg(tgMessage, tgMarkup);
+        }
 
         // ── Post-processing in background (non-blocking) ──────
         const videoBuffer = req.file.buffer;
