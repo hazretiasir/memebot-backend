@@ -461,6 +461,11 @@ router.get('/search', async (req, res) => {
 
         // ── 4. Still nothing? Fall back to most popular ───────────────────────
         if (allRankedVideos.length === 0) {
+            // Admin'e sessizce haber ver (Sadece ilk sayfada, tekrarlı spam olmasın)
+            if (pageNum === 1) {
+                tg(`🔍 <b>Arama Bulunamadı</b>\nBir kullanıcı "<i>${query}</i>" aradı ama sistemde yok.`);
+            }
+
             allRankedVideos = await Video.find({
                 ...(excludeArray.length > 0 ? { _id: { $nin: excludeArray } } : {}),
                 isApproved: { $ne: false }
