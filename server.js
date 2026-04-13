@@ -9,6 +9,7 @@ const searchRoutes   = require('./routes/searches');
 const downloaderRoutes = require('./routes/downloader');
 const telegramRoutes = require('./routes/telegram');
 const notificationsRoutes = require('./routes/notifications');
+const youtubeRoutes  = require('./routes/youtube');
 
 // Initialize Firebase Admin
 const admin = require("firebase-admin");
@@ -68,6 +69,7 @@ app.use('/api/videos', videoRoutes);
 app.use('/api/searches', searchRoutes);
 app.use('/api/downloader', downloaderRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/youtube', youtubeRoutes);
 app.use('/telegram', telegramRoutes);
 
 
