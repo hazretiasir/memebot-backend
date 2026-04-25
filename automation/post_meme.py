@@ -182,7 +182,6 @@ def post_to_instagram(video_path: str, caption: str, session_id: str) -> bool:
             },
             "last_login": int(__import__("time").time()),
         })
-        cl.user_id = user_id
         print(f"   ✅ Cookie yüklendi (user_id: {user_id})")
 
         print("🎬 Instagram Reel yükleniyor...")
