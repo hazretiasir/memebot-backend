@@ -163,14 +163,27 @@ def post_to_instagram(video_path: str, caption: str, session_id: str) -> bool:
 
     try:
         from instagrapi import Client
-        from instagrapi.exceptions import LoginRequired, ChallengeRequired
 
-        print("📸 Instagram'a bağlanılıyor (session_id ile)...")
+        print("📸 Instagram'a bağlanılıyor (cookie inject)...")
         cl = Client()
-        cl.delay_range = [1, 3]  # Bot tespitini azaltmak için
+        cl.delay_range = [1, 3]
 
-        cl.login_by_sessionid(session_id)
-        print("   ✅ Oturum açıldı.")
+        # login_by_sessionid() cloud IP'lerde Instagram'ın bot-detection
+        # endpointini tetikler. Cookie'yi doğrudan settings'e yazıyoruz.
+        user_id = session_id.split(":")[0]
+        cl.set_settings({
+            "cookies": {
+                "sessionid": session_id,
+                "ds_user_id": user_id,
+            },
+            "authorization_data": {
+                "ds_user_id": user_id,
+                "sessionid": session_id,
+            },
+            "last_login": int(__import__("time").time()),
+        })
+        cl.user_id = user_id
+        print(f"   ✅ Cookie yüklendi (user_id: {user_id})")
 
         print("🎬 Instagram Reel yükleniyor...")
         media = cl.clip_upload(
