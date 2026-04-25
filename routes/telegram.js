@@ -153,7 +153,7 @@ async function cmdSetToken(args) {
             '❌ Eksik parametre.\n\nKullanım:\n' +
             '<code>/settoken twitter TOKEN</code>\n' +
             '<code>/settoken tiktok_refresh TOKEN</code>\n' +
-            '<code>/settoken instagram TOKEN</code>'
+            '<code>/settoken instagram SESSION_ID</code>'
         );
         return;
     }
@@ -164,7 +164,7 @@ async function cmdSetToken(args) {
     const keyMap = {
         twitter:        'twitter_auth_token',
         tiktok_refresh: 'tiktok_refresh_token',
-        instagram:      'instagram_access_token',
+        instagram:      'instagram_session_id',
     };
 
     const key = keyMap[type];
@@ -186,7 +186,7 @@ async function cmdSetToken(args) {
 async function cmdTokens() {
     const cfg = require('mongoose').connection.db.collection('config');
 
-    const igDoc = await cfg.findOne({ key: 'instagram_access_token' });
+    const igDoc = await cfg.findOne({ key: 'instagram_session_id' });
     const ttDoc = await cfg.findOne({ key: 'tiktok_refresh_token' });
     const twDoc = await cfg.findOne({ key: 'twitter_auth_token' });
 
@@ -194,11 +194,10 @@ async function cmdTokens() {
     let igLine;
     if (igDoc?.refreshed_at) {
         const ageDays = Math.floor((Date.now() - new Date(igDoc.refreshed_at)) / 86400000);
-        const nextDays = 45 - ageDays;
-        const emoji = nextDays <= 5 ? '🔴' : nextDays <= 15 ? '🟡' : '🟢';
-        igLine = `${emoji} <b>Instagram:</b> ${ageDays} gün önce yenilendi, ${nextDays} gün kaldı`;
+        const emoji = ageDays > 30 ? '🟡' : '🟢';
+        igLine = `${emoji} <b>Instagram:</b> session_id ${ageDays} gün önce güncellendi`;
     } else {
-        igLine = `⚪ <b>Instagram:</b> MongoDB'de kayıt yok`;
+        igLine = `⚪ <b>Instagram:</b> MongoDB'de session_id kaydı yok (env var kullanılıyor)`;
     }
 
     // TikTok
@@ -235,7 +234,7 @@ function cmdYardim() {
         `/post — hemen video paylaştır\n` +
         `/scraper — scraper'ı başlat\n` +
         `/tokens — token durumları\n` +
-        `/settoken [twitter|tiktok_refresh|instagram] TOKEN`
+        `/settoken [twitter|tiktok_refresh|instagram] SESSION_ID`
     );
 }
 
