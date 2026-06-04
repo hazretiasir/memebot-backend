@@ -741,7 +741,7 @@ router.get('/count', async (req, res) => {
 // ─── GET /api/videos ─────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
     try {
-        const { page = 1, limit = 20, sort = 'recent' } = req.query;
+        const { page = 1, limit = 20, sort = 'recent', since } = req.query;
         const skip = (parseInt(page) - 1) * parseInt(limit);
 
         const sortMap = {
@@ -751,30 +751,27 @@ router.get('/', async (req, res) => {
         };
 
         const sortObj = sortMap[sort] || sortMap.recent;
-
         const maxLimit = Math.min(parseInt(limit), 5000);
 
+        const query = { isApproved: { $ne: false } };
+        if (since) {
+            const sinceDate = new Date(since);
+            if (!isNaN(sinceDate.getTime())) query.createdAt = { $gte: sinceDate };
+        }
+
         const [videos, total] = await Promise.all([
-            Video.find({ isApproved: { $ne: false } }).sort(sortObj).skip(skip).limit(maxLimit).allowDiskUse(true),
-            Video.countDocuments({ isApproved: { $ne: false } }),
+            Video.find(query).sort(sortObj).skip(skip).limit(maxLimit).allowDiskUse(true),
+            Video.countDocuments(query),
         ]);
+
+        const totalPages = Math.ceil(total / maxLimit);
+        const videoJsons = await Promise.all(videos.map(videoToJson));
 
         res.json({
             total,
+            totalPages,
             page: parseInt(page),
-            videos: videos.map(v => ({
-                _id: v._id,
-                title: v.title,
-                tags: v.tags,
-                s3Url: v.s3Url,
-                thumbnailUrl: v.thumbnailUrl,
-                likes: v.likes,
-                dislikes: v.dislikes,
-                relevanceScore: v.relevanceScore,
-                downloadCount: v.downloadCount,
-                tweetUrl: v.tweetUrl,
-                createdAt: v.createdAt,
-            })),
+            videos: videoJsons,
         });
     } catch (err) {
         console.error('List error:', err);
