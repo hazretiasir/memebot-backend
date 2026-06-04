@@ -744,13 +744,6 @@ router.get('/', async (req, res) => {
         const { page = 1, limit = 20, sort = 'recent', since } = req.query;
         const skip = (parseInt(page) - 1) * parseInt(limit);
 
-        const sortMap = {
-            recent: { createdAt: -1 },
-            popular: { relevanceScore: -1, likes: -1 },
-            most_downloaded: { downloadCount: -1 },
-        };
-
-        const sortObj = sortMap[sort] || sortMap.recent;
         const maxLimit = Math.min(parseInt(limit), 5000);
 
         const query = { isApproved: { $ne: false } };
@@ -759,16 +752,33 @@ router.get('/', async (req, res) => {
             if (!isNaN(sinceDate.getTime())) query.createdAt = { $gte: sinceDate };
         }
 
-        const [videos, total] = await Promise.all([
-            Video.find(query).sort(sortObj).skip(skip).limit(maxLimit).allowDiskUse(true),
-            Video.countDocuments(query),
-        ]);
+        let videos, totalPages;
 
-        const totalPages = Math.ceil(total / maxLimit);
+        if (sort === 'popular') {
+            // Top 150 popüler videodan rastgele örnekle — her yenilemede farklı sonuç
+            const sampleSize = maxLimit;
+            const poolSize = 150;
+            videos = await Video.aggregate([
+                { $match: query },
+                { $sort: { relevanceScore: -1, likes: -1 } },
+                { $limit: poolSize },
+                { $sample: { size: sampleSize } },
+            ]).allowDiskUse(true);
+            totalPages = 1;
+        } else {
+            const sortMap = {
+                recent: { createdAt: -1 },
+                most_downloaded: { downloadCount: -1 },
+            };
+            const sortObj = sortMap[sort] || sortMap.recent;
+            const total = await Video.countDocuments(query);
+            totalPages = Math.ceil(total / maxLimit);
+            videos = await Video.find(query).sort(sortObj).skip(skip).limit(maxLimit).allowDiskUse(true);
+        }
+
         const videoJsons = await Promise.all(videos.map(videoToJson));
 
         res.json({
-            total,
             totalPages,
             page: parseInt(page),
             videos: videoJsons,
