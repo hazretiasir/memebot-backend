@@ -738,6 +738,78 @@ router.get('/count', async (req, res) => {
     }
 });
 
+// ─── POST /api/videos/kesfet ─────────────────────────────────────────────────
+// Karışık keşfet feed'i:
+//   3 popüler (top-100'den random) + 3 en yeni + 3 en çok indirilen + kalan unseen
+// seenIds: kullanıcının daha önce gördüğü video ID'leri
+router.post('/kesfet', async (req, res) => {
+    try {
+        const { seenIds = [], limit = 20 } = req.body;
+        const PER_CAT = 3;
+        const unseenCount = Math.max(0, limit - PER_CAT * 3);
+
+        const baseQuery = { isApproved: { $ne: false } };
+
+        // ObjectId dönüşümü (aggregate pipeline için gerekli)
+        const excludeOids = seenIds
+            .map(id => { try { return new mongoose.Types.ObjectId(id); } catch { return null; } })
+            .filter(Boolean);
+
+        const unseenMatch = excludeOids.length > 0
+            ? { ...baseQuery, _id: { $nin: excludeOids } }
+            : baseQuery;
+
+        const [popular, newest, mostDownloaded, unseen] = await Promise.all([
+            // 3 popüler — top 100'den random sample (seenIds'ten bağımsız, kalite garantisi)
+            Video.aggregate([
+                { $match: baseQuery },
+                { $sort: { relevanceScore: -1, likes: -1 } },
+                { $limit: 100 },
+                { $sample: { size: PER_CAT } },
+            ]).allowDiskUse(true),
+
+            // 3 en yeni unseen
+            Video.find(unseenMatch).sort({ createdAt: -1 }).limit(PER_CAT).lean(),
+
+            // 3 en çok indirilen unseen
+            Video.find(unseenMatch).sort({ downloadCount: -1 }).limit(PER_CAT).lean(),
+
+            // Kalan: unseen havuzundan random
+            unseenCount > 0
+                ? Video.aggregate([
+                    { $match: unseenMatch },
+                    { $sample: { size: unseenCount + 10 } }, // dedup buffer
+                  ]).allowDiskUse(true)
+                : Promise.resolve([]),
+        ]);
+
+        // Deduplikasyon
+        const usedIds = new Set(seenIds);
+        const unique = [];
+        for (const v of [...popular, ...newest, ...mostDownloaded, ...unseen]) {
+            const id = v._id.toString();
+            if (!usedIds.has(id)) {
+                usedIds.add(id);
+                unique.push(v);
+            }
+        }
+
+        // Fisher-Yates shuffle
+        for (let i = unique.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [unique[i], unique[j]] = [unique[j], unique[i]];
+        }
+
+        const result = unique.slice(0, limit);
+        const videoJsons = await Promise.all(result.map(videoToJson));
+
+        res.json({ videos: videoJsons, hasMore: result.length >= limit });
+    } catch (err) {
+        console.error('Keşfet error:', err);
+        res.status(500).json({ error: 'Keşfet failed', details: err.message });
+    }
+});
+
 // ─── GET /api/videos ─────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
     try {
